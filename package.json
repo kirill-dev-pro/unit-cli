@@ -1,0 +1,29 @@
+{
+  "name": "unit-cli",
+  "version": "0.0.1",
+  "description": "Unitcluster cli tool",
+  "main": "index.js",
+  "dependencies": {
+    "commander": "^2.11.0",
+    "request": "^2.81.0",
+    "request-promise-native": "^1.0.4",
+    "speedtestcli": "^1.0.4"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"No tests, why?\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zmeu213/Unit-cli.git"
+  },
+  "keywords": [
+    "cli"
+  ],
+  "author": "Kirill",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Zmeu213/Unit-cli/issues"
+  },
+  "homepage": "https://github.com/Zmeu213/Unit-cli#readme"
+}
