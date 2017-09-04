@@ -4,6 +4,7 @@
   "description": "Unitcluster cli tool",
   "main": "index.js",
   "dependencies": {
+    "colors": "^1.1.2",
     "commander": "^2.11.0",
     "daemon": "^1.1.0",
     "keypress": "^0.2.1",
@@ -15,7 +16,7 @@
     "standard": "^10.0.3"
   },
   "scripts": {
-    "test": "echo \"No tests, why?\""
+    "test": "standard"
   },
   "repository": {
     "type": "git",
