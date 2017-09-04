@@ -16,7 +16,6 @@ const request = require('request-promise-native')
 const Readline = require('readline')
 const keypress = require('keypress')
 const colors = require('colors')
-const stream = require('stream')
 
 colors.setTheme({
   silly: 'rainbow',
@@ -37,7 +36,7 @@ const readline = Readline.createInterface({
 })
 
 const unitclusterUrl = 'http://vcap.me:3000/'
-const runUrl = (name, login) => { return `http://${login}.vcap.me:3000/${name}`}
+const runUrl = (name, login) => { return `http://${login}.vcap.me:3000/${name}` }
 let watched = []
 let lastEvent = 0
 
@@ -190,33 +189,31 @@ async function init () {
 
 // ====
 
-async function runUnit(unitName, login) {
+async function runUnit (unitName, login, key) {
   if (!unitName) return
   let result
   try {
-    result = await request(runUrl(unitName, login))
-    printUnitLogs(unitName, login)
+    result = await request(runUrl(unitName, login) + '?key=' + key)
   } catch (errorResponse) {
     let error = JSON.parse(errorResponse.error)
     console.error('[Module %s error] '.error + error.error, unitName)
-    if (error.position.line)
-      console.error('at line', error.position.line)
-    else 
-      console.error('%s'.error, error.position)
+    if (error.position.line) { console.error('at line', error.position.line) } else { console.error('%s'.error, error.position) }
   } finally {
     if (!result) return
     console.log('[ %s ]'.info, unitName, result)
   }
 }
 
-function printUnitLogs(unitName, login) {
-  const logs = new stream()
-  logs.on('data', (chunk) => {
-    console.log(`Received ${chunk.length} bytes of data.`);
-    console.log(chunk)
-    console.log(chunk.toString)
-  });
-  request(runUrl(unitName, login)).pipe(logs)
+function printUnitLogs (unitName, login, key) {
+  let url
+  if (key) {
+    url = runUrl(unitName, login) + '/logs?key=' + key
+  } else {
+    url = runUrl(unitName, login) + '/logs'
+  }
+  request(url).on('data', (chunk) => {
+    console.log(chunk.toString())
+  })
 }
 
 async function main () {
@@ -244,7 +241,8 @@ async function main () {
       if (unitUpdated) {
         // run unit
         // console.log(unitUpdated)
-        runUnit(unitUpdated, user.login)
+        runUnit(unitUpdated, user.login, user.key)
+        printUnitLogs(unitUpdated, user.login, user.key)
       }
     }
   })
