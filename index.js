@@ -16,6 +16,8 @@ const request = require('request-promise-native')
 const Readline = require('readline')
 const keypress = require('keypress')
 const colors = require('colors')
+const _ = require('underscore')
+const moment = require('moment')
 
 colors.setTheme({
   silly: 'rainbow',
@@ -35,8 +37,13 @@ const readline = Readline.createInterface({
   output: process.stdout
 })
 
-const unitclusterUrl = 'http://vcap.me:3000/'
-const runUrl = (name, login) => { return `http://${login}.vcap.me:3000/${name}` }
+const runUrl = (name, user) => {
+  if (/unitcluster\.com/.test(user.server)) {
+    return `https://${user.login}.unit.run/${name}` + (user.key ? '?key=' + user.key : '')
+  } else {
+    return user.server.replace('//', '//' + user.login + '.').replace('https', 'http') + '/' + name
+  }
+}
 let watched = []
 let lastEvent = 0
 
@@ -49,26 +56,37 @@ program
   .option('-b, --daemon [true]', 'Run as a daemon', (val) => { return !val }, true)
   .parse(process.argv)
 
-async function getApi () {
+async function getApi (user) {
   try {
-    let apiString = 'api'
-    for (let arg of arguments) {
-      if (typeof arg === 'string') { apiString = path.join(apiString, arg) }
+    let apiString = 'api/'
+    let params = _.omit(arguments, '0')
+    apiString += path.join(_.values(params).join('/'))
+    // for (let arg of params) {
+    //   if (typeof arg === 'string') { apiString = path.join(apiString, arg) }
+    // }
+    let options = {
+      url: user.server + '/' + apiString,
+      method: 'GET',
+      headers: {
+        'Authorization': 'UCKEY ' + user.key
+      }
+      // followRedirect: false
     }
-    let htmlString = await request(unitclusterUrl + apiString)
+    console.log(options.method, options.url)
+    let htmlString = await request(options)
     return JSON.parse(htmlString)
   } catch (err) {
     console.error(err, err.stack)
   }
 }
 
-async function getUnits (login) {
-  let units = await getApi('users', login, 'units')
+async function getUnits (user) {
+  let units = await getApi(user, 'users', user.login, 'units')
   return units.items
 }
 
-async function getUnit (login, name) {
-  let unit = getApi('units', login, name)
+async function getUnit (user, name) {
+  let unit = getApi(user, 'units', user.login, name)
   return unit
 }
 
@@ -94,15 +112,15 @@ function saveUnit (unit, dir) {
   }
 }
 
-async function updateUnit (name, login, key, newCode) {
+async function updateUnit (unitName, user, newCode) {
   try {
-    let unit = await getUnit(login, name)
+    let unit = await getUnit(user, unitName)
     unit.code = newCode
     let options = {
       method: 'PATCH',
-      url: unitclusterUrl + path.join('api', 'units', login, name),
+      url: user.server + '/' + path.join('api', 'units', user.login, unitName),
       headers: {
-        'Authorization': 'UCKEY ' + key
+        'Authorization': 'UCKEY ' + user.key
       },
       form: {code: newCode}
     }
@@ -135,7 +153,7 @@ function getUserHome () {
 }
 
 function saveUser (user) {
-  fs.writeFileSync(getUserHome() + '.unit-cli', JSON.stringify(user), 'utf-8')
+  fs.writeFileSync(getUserHome() + '.unit-cli.json', JSON.stringify(user), 'utf-8')
 }
 
 function question (question) {
@@ -157,6 +175,10 @@ async function askUserToLogin () {
   if (!user.path) {
     user.path = defaultPath
   }
+  user.server = await question('Enter your server [ https://unitcluster.com ]: ')
+  if (!user.server) {
+    user.server = 'https://unitcluster.com'
+  }
   // if (user.path !== path.basename(user.path)) { // ask again
   //  do {
   //    user.path = await question('You enter invalid path. Try again. Or leave it blank for default: ')
@@ -169,13 +191,13 @@ async function askUserToLogin () {
 }
 
 function getUser () {
-  let data = fs.readFileSync(getUserHome() + '.unit-cli', 'utf-8')
+  let data = fs.readFileSync(getUserHome() + '.unit-cli.json', 'utf-8')
   return JSON.parse(data)
 }
 
 async function init () {
   let user
-  if (!fs.existsSync(getUserHome() + '.unit-cli')) {
+  if (!fs.existsSync(getUserHome() + '.unit-cli.json')) {
     user = await askUserToLogin()
   } else {
     user = getUser()
@@ -187,33 +209,112 @@ async function init () {
   }
 }
 
-// ====
+// Run Unit on update
 
-async function runUnit (unitName, login, key) {
-  if (!unitName) return
+async function runUnit (unitName, user) {
+  // get deploy name
+  // run deploy
+  // get logs from deploy
+
+  let deploy = await getDeploy(unitName, user)
+  if (!deploy) {
+    // create new deploy
+    deploy = await createNewDeploy(unitName, user, false) // public: false
+  }
+  printUnitLogs(deploy.name, user)
+  runDeploy(deploy.name, user)
+}
+
+async function runDeploy (name, user) {
+  if (!name) return
+  console.log('[RUN UNIT]', name)
   let result
   try {
-    result = await request(runUrl(unitName, login) + '?key=' + key)
-  } catch (errorResponse) {
-    let error = JSON.parse(errorResponse.error)
-    console.error('[Module %s error] '.error + error.error, unitName)
-    if (error.position.line) { console.error('at line', error.position.line) } else { console.error('%s'.error, error.position) }
-  } finally {
-    if (!result) return
-    console.log('[ %s ]'.info, unitName, result)
+    let options = {
+      url: runUrl(name, user),
+      method: 'GET',
+      headers: {
+        'Authorization': 'UCKEY ' + user.key
+      }
+    }
+    console.log('GET'.red, options.url)
+    try {
+      result = await request(options)
+    } catch (requestError) {
+      let error = JSON.parse(requestError.error)
+      console.error('[Module %s error] '.error + error.error, name)
+      if (error.position.line) { console.error('at line', error.position.line) } else { console.error('%s'.error, error.position) }
+    }
+  } catch (error) {
+    console.error(error)
+  }
+  if (!result) return
+  console.log('[ %s ]'.info, name, result)
+  return result
+}
+
+async function printUnitLogs (unitName, user) {
+  let url
+  if (/unitcluster.com/.test(user.server)) {
+    url = 'https://' + user.login + '.unit.run/' + unitName + '/logs?key=' + user.key
+  } else {
+    url = user.server.replace('//', '//' + user.login + '.') + unitName + '/logs?key=' + user.key
+  }
+  console.log('[LOG]'.red, url)
+  await request(url).on('data', (chunk) => {
+    console.log('[ %s-%s ]'.info, unitName, moment().format())
+    console.log(chunk.toString())
+  })
+}
+
+async function getDeploy (unitName, user) {
+  let deploys = await getApi(user, 'units', user.login, unitName, 'deployed')
+  if (deploys.stats > 0) {
+    return deploys.units[0]
+  } else {
+    return null
   }
 }
 
-function printUnitLogs (unitName, login, key) {
-  let url
-  if (key) {
-    url = runUrl(unitName, login) + '/logs?key=' + key
-  } else {
-    url = runUrl(unitName, login) + '/logs'
+async function createNewDeploy (unitName, user, isPublic) {
+  let options = {
+    url: `${user.server}/api/units/${user.login}/${unitName}/deploy`,
+    headers: {
+      'Authorization': 'UCKEY ' + user.key
+    },
+    method: 'POST',
+    form: {
+      'name': unitName,
+      'public': isPublic,
+      'full_name': user.login + '/' + unitName
+    }
   }
-  request(url).on('data', (chunk) => {
-    console.log(chunk.toString())
-  })
+  console.log('GET'.red, options)
+  let result
+  try {
+    result = await request(options)
+  } catch (error) {
+    console.error(error)
+  }
+  console.log(result)
+  return JSON.parse(result)
+}
+
+function updateDeploy (deploy, user, newCode) {
+  request.patch(user.server + '/api/deployed/' + deploy.id)
+         .headers({
+           'Authorization': 'UCKEY ' + user.key
+         })
+         .form({
+           code: newCode
+         })
+}
+
+function deleteDeploy (deploy, user) {
+  request.delete(user.server + '/api/deployed/' + deploy.id)
+         .headers({
+           'Authorization': 'UCKEY ' + user.key
+         })
 }
 
 async function main () {
@@ -229,7 +330,7 @@ async function main () {
   if (!fs.existsSync(user.path)) {
     fs.mkdirSync(user.path)
   }
-  let units = await getUnits(user.login)
+  let units = await getUnits(user)
   saveUnits(units, user.path)
 
   console.log('Units in', user.path, 'are now watched for changes')
@@ -240,9 +341,8 @@ async function main () {
       // run unit and pipe logs
       if (unitUpdated) {
         // run unit
-        // console.log(unitUpdated)
-        runUnit(unitUpdated, user.login, user.key)
-        printUnitLogs(unitUpdated, user.login, user.key)
+        runUnit(unitUpdated, user)
+        console.log('[Enter]'.info, unitUpdated)
       }
     }
   })
@@ -256,7 +356,7 @@ async function main () {
       let newCode = getCode(filePath)
       let moduleName = filename.replace(/\..*/, '')
       console.log('Changes in "' + moduleName + '", updating...')
-      let result = await updateUnit(moduleName, user.login, user.key, newCode)
+      let result = await updateUnit(moduleName, user, newCode)
       if (JSON.parse(result).code !== newCode) {
         console.error('Code not saved')
       } else {
