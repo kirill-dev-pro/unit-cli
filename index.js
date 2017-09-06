@@ -261,9 +261,14 @@ async function printUnitLogs (unitName, user) {
     url = user.server.replace('//', '//' + user.login + '.') + unitName + '/logs?key=' + user.key
   }
   console.log('[LOG]'.red, url)
-  await request(url).on('data', (chunk) => {
+  let logStream = request(url)
+  logStream.on('data', (chunk) => {
     console.log('[ %s-%s ]'.info, unitName, moment().format())
     console.log(chunk.toString())
+  })
+  logStream.on('end', ()=>{
+    console.log('[ %s-%s ]'.info, unitName, moment().format())
+    console.log('End of logs')
   })
 }
 

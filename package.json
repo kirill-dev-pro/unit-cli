@@ -29,6 +29,7 @@
   ],
   "author": "Kirill",
   "license": "ISC",
+  "bin": "./index.js",
   "bugs": {
     "url": "https://github.com/Zmeu213/Unit-cli/issues"
   },
