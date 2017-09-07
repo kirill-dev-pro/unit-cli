@@ -53,9 +53,28 @@ program
   .option('-l, --login [login]', 'Set login to sync units from unitcluster')
   .option('-k, --key [key]', 'Set API key from your Unitcluster account')
   .option('-n, --new [unit]', 'Create new unit')
+  .option('-s, --server [server]', 'Set server to work with')
   .parse(process.argv)
 
-async function getApi (user) {
+function urlConstructor(type, user, name) {
+  let url
+  if (type === 'logs' || type === 'run') {
+    if (/unitcluster\.com/.test(user.server)) {
+      url = 'https://' + user.login + '.unit.run/' + name
+    } else {
+      url = user.server.replace('//', '//' + user.login + '.').replace('https', 'http') + '/' + name
+    }
+    if (type === 'logs') {
+      url += '/logs'
+    }
+    if (user.key) {
+      url += '?key=' + user.key
+    }
+    return url
+  }
+}
+
+async function getApi(user) {
   try {
     let apiString = 'api/'
     let params = _.omit(arguments, '0')
@@ -67,7 +86,7 @@ async function getApi (user) {
       url: user.server + '/' + apiString,
       method: 'GET',
       headers: {
-        'Authorization': 'UCKEY ' + user.key
+        Authorization: 'UCKEY ' + user.key
       }
       // followRedirect: false
     }
@@ -79,23 +98,23 @@ async function getApi (user) {
   }
 }
 
-async function getUnits (user) {
+async function getUnits(user) {
   let units = await getApi(user, 'users', user.login, 'units')
   return units.items
 }
 
-async function getUnit (user, name) {
+async function getUnit(user, name) {
   let unit = getApi(user, 'units', user.login, name)
   return unit
 }
 
-function saveUnits (units, dir) {
+function saveUnits(units, dir) {
   for (let unit of units) {
     saveUnit(unit, dir)
   }
 }
 
-function saveUnit (unit, dir) {
+function saveUnit(unit, dir) {
   try {
     let filePath = path.join(dir, unit.name)
     if (unit.language === 'javascript') {
@@ -111,7 +130,7 @@ function saveUnit (unit, dir) {
   }
 }
 
-async function updateUnit (unitName, user, newCode) {
+async function updateUnit(unitName, user, newCode) {
   try {
     let unit = await getUnit(user, unitName)
     unit.code = newCode
@@ -119,9 +138,9 @@ async function updateUnit (unitName, user, newCode) {
       method: 'PATCH',
       url: user.server + '/' + path.join('api', 'units', user.login, unitName),
       headers: {
-        'Authorization': 'UCKEY ' + user.key
+        Authorization: 'UCKEY ' + user.key
       },
-      form: {code: newCode}
+      form: { code: newCode }
     }
     return await request(options)
   } catch (err) {
@@ -129,13 +148,13 @@ async function updateUnit (unitName, user, newCode) {
   }
 }
 
-function getCode (file) {
+function getCode(file) {
   let code = fs.readFileSync(file, 'utf-8')
   return code
 }
 
 // If not duplicate and unit file
-function notDuplicateEvent (filename) {
+function notDuplicateEvent(filename) {
   let currentTime = Math.floor(new Date() / 1000)
   if (watched.indexOf(filename) > -1 && lastEvent + 3 < currentTime) {
     lastEvent = currentTime
@@ -147,15 +166,15 @@ function notDuplicateEvent (filename) {
 
 // Initial
 
-function getUserHome () {
+function getUserHome() {
   return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'] + '/'
 }
 
-function saveUser (user) {
+function saveUser(user) {
   fs.writeFileSync(getUserHome() + '.unit-cli.json', JSON.stringify(user), 'utf-8')
 }
 
-function question (question) {
+function question(question) {
   return new Promise((resolve) => {
     readline.question(question, (answer) => {
       resolve(answer)
@@ -163,38 +182,32 @@ function question (question) {
   })
 }
 
-async function askUserToLogin () {
+async function askUserToLogin() {
   let user = {}
-  let defaultPath = path.join(__dirname, 'units')
+  let defaultPath = path.join(process.cwd(), 'units')
   console.log('Hi! It seems you try to start Unit-cli first time')
-  console.log('Tell me your login and API key from your user account')
+  console.log('Enter your UnitCluster login and API key ')
   user.login = await question('Login: ')
   user.key = await question('API key: ')
-  user.path = await question('Enter path to save your unitst [' + defaultPath + ']: ')
+  user.path = await question('Folder to sync your units to [' + defaultPath + ']: ')
   if (!user.path) {
     user.path = defaultPath
   }
-  user.server = await question('Enter your server [ https://unitcluster.com ]: ')
+  // we dont need another server, anyway it could be changed by -s parameter
+  // user.server = await question('Enter your server [ https://unitcluster.com ]: ')
   if (!user.server) {
     user.server = 'https://unitcluster.com'
   }
-  // if (user.path !== path.basename(user.path)) { // ask again
-  //  do {
-  //    user.path = await question('You enter invalid path. Try again. Or leave it blank for default: ')
-  //    if (!user.path)
-  //      user.path = defaultPath
-  //  } while (user.path !== path.basename(user.path))
-  // }
   saveUser(user)
   return user
 }
 
-function getUser () {
+function getUser() {
   let data = fs.readFileSync(getUserHome() + '.unit-cli.json', 'utf-8')
   return JSON.parse(data)
 }
 
-async function init () {
+async function init() {
   let user
   if (!fs.existsSync(getUserHome() + '.unit-cli.json')) {
     user = await askUserToLogin()
@@ -210,7 +223,7 @@ async function init () {
 
 // Run Unit on update
 
-async function runUnit (unitName, user) {
+async function runUnit(unitName, user) {
   // get deploy name
   // run deploy
   // get logs from deploy
@@ -224,16 +237,16 @@ async function runUnit (unitName, user) {
   runDeploy(deploy.name, user)
 }
 
-async function runDeploy (name, user) {
+async function runDeploy(name, user) {
   if (!name) return
   console.log('[RUN UNIT]', name)
   let result
   try {
     let options = {
-      url: runUrl(name, user),
+      url: urlConstructor('run', user, name),
       method: 'GET',
       headers: {
-        'Authorization': 'UCKEY ' + user.key
+        Authorization: 'UCKEY ' + user.key
       }
     }
     console.log('GET'.red, options.url)
@@ -252,13 +265,8 @@ async function runDeploy (name, user) {
   return result
 }
 
-async function printUnitLogs (unitName, user) {
-  let url
-  if (/unitcluster.com/.test(user.server)) {
-    url = 'https://' + user.login + '.unit.run/' + unitName + '/logs?key=' + user.key
-  } else {
-    url = user.server.replace('//', '//' + user.login + '.') + unitName + '/logs?key=' + user.key
-  }
+async function printUnitLogs(unitName, user) {
+  let url = urlConstructor('logs', user, unitName)
   console.log('[LOG]'.red, url)
   let logStream = request(url)
   logStream.on('data', (chunk) => {
@@ -280,7 +288,7 @@ async function printUnitLogs (unitName, user) {
   })
 }
 
-async function getDeploy (unitName, user) {
+async function getDeploy(unitName, user) {
   let deploys = await getApi(user, 'units', user.login, unitName, 'deployed')
   if (deploys.stats > 0) {
     return deploys.units[0]
@@ -289,17 +297,17 @@ async function getDeploy (unitName, user) {
   }
 }
 
-async function createNewDeploy (unitName, user, isPublic) {
+async function createNewDeploy(unitName, user, isPublic) {
   let options = {
     url: `${user.server}/api/units/${user.login}/${unitName}/deploy`,
     headers: {
-      'Authorization': 'UCKEY ' + user.key
+      Authorization: 'UCKEY ' + user.key
     },
     method: 'POST',
     form: {
-      'name': unitName,
-      'public': isPublic,
-      'full_name': user.login + '/' + unitName
+      name: unitName,
+      public: isPublic,
+      full_name: user.login + '/' + unitName
     }
   }
   console.log('GET'.red, options)
@@ -313,25 +321,25 @@ async function createNewDeploy (unitName, user, isPublic) {
   return JSON.parse(result)
 }
 
-function updateDeploy (deploy, user, newCode) {
+function updateDeploy(deploy, user, newCode) {
   request.patch(user.server + '/api/deployed/' + deploy.id)
-         .headers({
-           'Authorization': 'UCKEY ' + user.key
-         })
-         .form({
-           code: newCode
-         })
+    .headers({
+      Authorization: 'UCKEY ' + user.key
+    })
+    .form({
+      code: newCode
+    })
 }
 
-function deleteDeploy (deploy, user) {
+function deleteDeploy(deploy, user) {
   request.delete(user.server + '/api/deployed/' + deploy.id)
-         .headers({
-           'Authorization': 'UCKEY ' + user.key
-         })
+    .headers({
+      Authorization: 'UCKEY ' + user.key
+    })
 }
 
 // Check for parameters to be changed
-function updateUserParameters (program, user) {
+function updateUserParameters(program, user) {
   if (program.dir || program.key || program.login) {
     if (program.dir) {
       user.path = program.dir
@@ -342,11 +350,14 @@ function updateUserParameters (program, user) {
     if (program.login) {
       user.login = program.login
     }
+    if (program.server) {
+      user.server = program.server
+    }
     saveUser(user)
   }
 }
 
-function createUnitsPath (path) {
+function createUnitsPath(path) {
   try {
     if (!fs.existsSync(path)) {
       fs.mkdirSync(path)
@@ -357,7 +368,7 @@ function createUnitsPath (path) {
   }
 }
 
-function watchKeypressed (input, events) {
+function watchKeypressed(input, events) {
   keypress(input)
   for (let event of events) {
     input.on('keypress', (ch, key) => {
@@ -371,7 +382,7 @@ function watchKeypressed (input, events) {
   input.resume()
 }
 
-function watchUnits (user, unitUpdated) {
+function watchUnits(user, unitUpdated) {
   let watcher = fs.watch(user.path, { encoding: 'UTF-8' })
   watcher.on('change', async (event, filename) => {
     if (notDuplicateEvent(filename)) {
@@ -389,10 +400,10 @@ function watchUnits (user, unitUpdated) {
       }
     }
   })
-  console.log('Units in', user.path, 'are now watched for changes')
+  console.log('Watching units in', user.path, 'for changes...')
 }
 
-function checkRunUnit (unitUpdated, user) {
+function checkRunUnit(unitUpdated, user) {
   if (unitUpdated.name) {
     // run unit
     runUnit(unitUpdated.name, user)
@@ -400,8 +411,8 @@ function checkRunUnit (unitUpdated, user) {
   }
 }
 
-async function main () {
-  let unitUpdated = {name: null}
+async function main() {
+  let unitUpdated = { name: null }
   let user
   try {
     user = await init()
