@@ -53,7 +53,6 @@ program
   .option('-l, --login [login]', 'Set login to sync units from unitcluster')
   .option('-k, --key [key]', 'Set API key from your Unitcluster account')
   .option('-n, --new [unit]', 'Create new unit')
-  .option('-b, --daemon [true]', 'Run as a daemon', (val) => { return !val }, true)
   .parse(process.argv)
 
 async function getApi (user) {
@@ -137,9 +136,9 @@ function getCode (file) {
 
 // If not duplicate and unit file
 function notDuplicateEvent (filename) {
-  let current = Math.floor(new Date() / 1000)
-  if (watched.indexOf(filename) > -1 && lastEvent + 3 < current) {
-    lastEvent = current
+  let currentTime = Math.floor(new Date() / 1000)
+  if (watched.indexOf(filename) > -1 && lastEvent + 3 < currentTime) {
+    lastEvent = currentTime
     return true
   } else {
     return false
@@ -263,8 +262,17 @@ async function printUnitLogs (unitName, user) {
   console.log('[LOG]'.red, url)
   let logStream = request(url)
   logStream.on('data', (chunk) => {
-    console.log('[ %s-%s ]'.info, unitName, moment().format())
-    console.log(chunk.toString())
+    // Parse logs
+    if (chunk.toString().substring(0,5) == 'data:') {
+      let message = JSON.parse(chunk.toString().substring(5))
+      if (message.log) {
+        console.log('[ %s ]'.info, message.ts)
+        console.log('[ %s ] :'.info, message.slot, message.log)
+      }
+      if (message.memory || message.cpu) {
+        // do something with stats
+      }
+    }
   })
   logStream.on('end', ()=>{
     console.log('[ %s-%s ]'.info, unitName, moment().format())
@@ -322,38 +330,48 @@ function deleteDeploy (deploy, user) {
          })
 }
 
-async function main () {
-  let unitUpdated = null
-  let user
-  try {
-    user = await init()
-  } catch (err) {
-    console.log('Exiting..')
-    return
-  }
-
-  if (!fs.existsSync(user.path)) {
-    fs.mkdirSync(user.path)
-  }
-  let units = await getUnits(user)
-  saveUnits(units, user.path)
-
-  console.log('Units in', user.path, 'are now watched for changes')
-
-  keypress(process.stdin)
-  process.stdin.on('keypress', function (ch, key) {
-    if (key && key.name === 'return') {
-      // run unit and pipe logs
-      if (unitUpdated) {
-        // run unit
-        runUnit(unitUpdated, user)
-        console.log('[Enter]'.info, unitUpdated)
-      }
+// Check for parameters to be changed
+function updateUserParameters (program, user) {
+  if (program.dir || program.key || program.login) {
+    if (program.dir) {
+      user.path = program.dir
     }
-  })
-  process.stdin.setRawMode(true)
-  process.stdin.resume()
+    if (program.key) {
+      user.key = program.key
+    }
+    if (program.login) {
+      user.login = program.login
+    }
+    saveUser(user)
+  }
+}
 
+function createUnitsPath(path) {
+  try {
+    if (!fs.existsSync(path)) {
+      fs.mkdirSync(path)
+    }
+  } catch (err) {
+    console.error(err, err.stack)
+    throw 'Cannot create directory, check permisions'
+  }
+}
+
+function watchKeypressed (input, events) {
+  keypress(input)
+  for (let event of events) {
+    input.on('keypress', (ch, key) => {
+      if (key && key.name === event.button) {
+        // do some stuff
+        event.fn.apply({}, event.args)
+      }
+    })
+  }
+  input.setRawMode(true)
+  input.resume()
+}
+
+function watchUnits(user, unitUpdated) {
   let watcher = fs.watch(user.path, { encoding: 'UTF-8' })
   watcher.on('change', async (event, filename) => {
     if (notDuplicateEvent(filename)) {
@@ -366,10 +384,63 @@ async function main () {
         console.error('Code not saved')
       } else {
         console.log('Press [Enter] to run unit')
-        unitUpdated = moduleName
+        unitUpdated.name = moduleName
+        console.log(unitUpdated.name)
       }
     }
   })
+  console.log('Units in', user.path, 'are now watched for changes')
+}
+
+function checkRunUnit(unitUpdated, user) {
+  if (unitUpdated.name) {
+    // run unit
+    runUnit(unitUpdated.name, user)
+    console.log('[Enter]'.info, unitUpdated.name)
+  }
+}
+
+async function main () {
+  let unitUpdated = {name: null}
+  let user
+  try {
+    user = await init()
+  } catch (err) {
+    console.log('Exiting..')
+    return
+  }
+
+  updateUserParameters(program, user)
+
+  try {
+    createUnitsPath(user.path)
+  } catch (e) {
+    console.error(e)
+    return
+  }
+
+  let units = await getUnits(user)
+  saveUnits(units, user.path)
+
+  watchKeypressed(process.stdin, [
+    {
+      button: 'return',
+      fn: checkRunUnit,
+      args: [unitUpdated, user]
+    },
+    {
+      button: 'backspace',
+      fn: console.log,
+      args: ['Backspace'.info]
+    },
+    {
+      button: 'escape',
+      fn: (a)=>{console.log(JSON.stringify(a))},
+      args: [unitUpdated]
+    }
+  ])
+
+  watchUnits(user, unitUpdated)
 }
 
 main()
