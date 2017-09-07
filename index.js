@@ -263,7 +263,7 @@ async function printUnitLogs (unitName, user) {
   let logStream = request(url)
   logStream.on('data', (chunk) => {
     // Parse logs
-    if (chunk.toString().substring(0,5) == 'data:') {
+    if (chunk.toString().substring(0, 5) === 'data:') {
       let message = JSON.parse(chunk.toString().substring(5))
       if (message.log) {
         console.log('[ %s ]'.info, message.ts)
@@ -274,7 +274,7 @@ async function printUnitLogs (unitName, user) {
       }
     }
   })
-  logStream.on('end', ()=>{
+  logStream.on('end', () => {
     console.log('[ %s-%s ]'.info, unitName, moment().format())
     console.log('End of logs')
   })
@@ -346,14 +346,14 @@ function updateUserParameters (program, user) {
   }
 }
 
-function createUnitsPath(path) {
+function createUnitsPath (path) {
   try {
     if (!fs.existsSync(path)) {
       fs.mkdirSync(path)
     }
   } catch (err) {
     console.error(err, err.stack)
-    throw 'Cannot create directory, check permisions'
+    throw new Error('Cannot create directory, check permisions')
   }
 }
 
@@ -371,7 +371,7 @@ function watchKeypressed (input, events) {
   input.resume()
 }
 
-function watchUnits(user, unitUpdated) {
+function watchUnits (user, unitUpdated) {
   let watcher = fs.watch(user.path, { encoding: 'UTF-8' })
   watcher.on('change', async (event, filename) => {
     if (notDuplicateEvent(filename)) {
@@ -392,7 +392,7 @@ function watchUnits(user, unitUpdated) {
   console.log('Units in', user.path, 'are now watched for changes')
 }
 
-function checkRunUnit(unitUpdated, user) {
+function checkRunUnit (unitUpdated, user) {
   if (unitUpdated.name) {
     // run unit
     runUnit(unitUpdated.name, user)
@@ -435,7 +435,7 @@ async function main () {
     },
     {
       button: 'escape',
-      fn: (a)=>{console.log(JSON.stringify(a))},
+      fn: (a) => { console.log(JSON.stringify(a)) },
       args: [unitUpdated]
     }
   ])
