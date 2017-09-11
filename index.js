@@ -19,6 +19,7 @@ const colors = require('colors')
 const _ = require('underscore')
 const moment = require('moment')
 const beautify = require('json-beautify')
+const watch = require('node-watch')
 
 colors.setTheme({
   silly: 'rainbow',
@@ -83,7 +84,7 @@ async function getApi (user) {
       }
       // followRedirect: false
     }
-    console.log(options.method, options.url)
+    console.log(colors.red(options.method), options.url)
     let htmlString = await request(options)
     return JSON.parse(htmlString)
   } catch (err) {
@@ -117,8 +118,8 @@ function saveUnit (unit, dir) {
       codeFile = unitPath + '/index.js'
       readmeFile = unitPath + '/readme.md'
       configFile = unitPath + '/config.json'
-      if (watched.indexOf(unit.name) === -1) {
-        watched.push(codeFile)
+      if (watched.indexOf(codeFile) === -1) {
+        watched.push(codeFile, readmeFile, configFile)
       }
     }
     createUnitsPath(unitPath)
@@ -141,33 +142,48 @@ function saveParameters (path, parameters) {
   fs.writeFileSync(path, beautify(config, null, 2, 10))
 }
 
-async function updateUnit (unitName, user, newCode) {
+async function updateUnit (unitName, user, newContent) {
   try {
-    let unit = await getUnit(user, unitName)
-    unit.code = newCode
+    let deploy = await getDeploy(unitName, user)
+    if (!deploy) return null // @TODO: create deploy here
+    console.log('[CONTENT]'.debug, newContent)
+    console.log('[DEPLOY]'.debug, JSON.stringify(deploy))
     let options = {
       method: 'PATCH',
       url: user.server + '/' + path.join('api', 'units', user.login, unitName),
       headers: {
         Authorization: 'UCKEY ' + user.key
       },
-      form: { code: newCode }
+      form: {
+        code: newContent.code ? newContent.code : deploy.unit.code,
+        readme: newContent.readme ? newContent.readme : deploy.unit.readme,
+        parameters: newContent.parameters ? newContent.parameters : deploy.parameters,
+        deployment_id: deploy.id,
+        full_name: user.login + '/' + unitName
+      }
     }
+    console.log('[OPTIONS]'.debug, options)
     return await request(options)
   } catch (err) {
     console.error(err, err.stack)
   }
 }
 
-function getCode (file) {
-  let code = fs.readFileSync(file, 'utf-8')
-  return code
+function getContent (file) {
+  let name = path.parse(file).name
+  let content = fs.readFileSync(file, 'utf-8')
+  switch (name) {
+    case 'index': return {'code': content}
+    case 'readme': return {'readme': content}
+    case 'config': return {'parameters': content}
+    default: return null
+  }
 }
 
 // If not duplicate and unit file
-function notDuplicateEvent (filename) {
+function notDuplicateEvent (filePath) {
   let currentTime = Math.floor(new Date() / 1000)
-  if (watched.indexOf(filename) > -1 && lastEvent + 3 < currentTime) {
+  if (watched.indexOf(filePath) > -1 && lastEvent + 3 < currentTime) {
     lastEvent = currentTime
     return true
   } else {
@@ -394,25 +410,29 @@ function watchKeypressed (input, events) {
 }
 
 function watchUnits (user, unitUpdated) {
-  let watcher = fs.watch(user.path, { encoding: 'UTF-8' })
-  watcher.on('change', async (event, filename) => {
-    if (notDuplicateEvent(filename)) {
-      
-      let filePath = path.join(user.path, filename)
-      let newCode = getCode(filePath)
-      let moduleName = filename.replace(/\..*/, '')
-      console.log('Changes in "' + moduleName + '", updating...')
-      let result = await updateUnit(moduleName, user, newCode)
-      if (JSON.parse(result).code !== newCode) {
-        console.error('Code not saved')
-      } else {
-        console.log('Press [Enter] to run unit')
-        unitUpdated.name = moduleName
-        console.log(unitUpdated.name)
+  watch(user.path, { recursive: true }, async (evt, filePath) => {
+    if (notDuplicateEvent(filePath)) {
+      let file = path.parse(filePath)
+      console.log('%s changed'.debug, file.base)
+      console.log('in %s'.debug, file.dir)
+      let unitName = file.dir.replace(user.path + '/', '')
+      let content = getContent(filePath)
+      if (content) {
+        console.log(content)
+        console.log('Changes in "'.debug + unitName + '", updating...'.debug)
+        let result = await updateUnit(unitName, user, content) // here should be object like {code: "let a..."} or {readme:}
+        let key = _.keys(content)[0]
+        if (JSON.parse(result)[key] !== content[key]) {
+          // console.log(key, JSON.parse(result), content)
+          console.error('Unit not saved'.error)
+        } else {
+          console.log('Press', '[Enter]'.cyan, 'to run', colors.info(unitName))
+          unitUpdated.name = unitName
+        }
       }
     }
   })
-  console.log('Watching units in', user.path, 'for changes...')
+  console.log('Watching units in %s for changes...'.debug, user.path)
 }
 
 function checkRunUnit (unitUpdated, user) {
@@ -429,11 +449,11 @@ async function main () {
   try {
     user = await init()
   } catch (err) {
-    console.log('Exiting..')
+    console.log('Exiting..'.error)
     return
   }
 
-  console.log(JSON.stringify(user))
+  console.log(colors.debug(JSON.stringify(user)))
 
   updateUserParameters(program, user)
 
