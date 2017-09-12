@@ -20,6 +20,8 @@ const _ = require('underscore')
 const moment = require('moment')
 const beautify = require('json-beautify')
 const watch = require('node-watch')
+const log = require('loglevel')
+const ProgressBar = require('progress')
 
 colors.setTheme({
   silly: 'rainbow',
@@ -48,6 +50,7 @@ program
   .option('-k, --key [key]', 'Set API key from your Unitcluster account')
   .option('-n, --new [unit]', 'Create new unit')
   .option('-s, --server [server]', 'Set server to work with')
+  .option('-o, --loglevel [level]', 'Set level of logs to print', 'info')
   .parse(process.argv)
 
 function urlConstructor (type, user, name) {
@@ -84,17 +87,30 @@ async function getApi (user) {
       }
       // followRedirect: false
     }
-    console.log(colors.red(options.method), options.url)
+    log.debug(colors.red(options.method), options.url)
     let htmlString = await request(options)
     return JSON.parse(htmlString)
   } catch (err) {
-    console.error(err, err.stack)
+    log.error(err, err.stack)
   }
 }
 
 async function getUnits (user) {
-  let units = await getApi(user, 'users', user.login, 'units')
-  return units.items
+  let units = []
+  let list = await getApi(user, 'users', user.login, 'units')
+  for (let item of list.items) {
+    // @TODO: make here some progress bar or something
+    let unit
+    let deploy = await getDeploy(item.name, user)
+    if (deploy) {
+      unit = deploy.unit
+      unit.parameters = deploy.parameters
+    } else {
+      unit = await getUnit(user, item.name)
+    }
+    units.push(unit)
+  }
+  return units
 }
 
 async function getUnit (user, name) {
@@ -127,7 +143,7 @@ function saveUnit (unit, dir) {
     fs.writeFileSync(readmeFile, unit.readme)
     saveParameters(configFile, unit.parameters ? unit.parameters : [])
   } catch (err) {
-    console.error(err, err.stack)
+    log.error(err, err.stack)
   }
 }
 
@@ -137,17 +153,38 @@ function saveParameters (path, parameters) {
     public: {}
   }
   for (let param of parameters) {
-    config[param.type][param.name] = param.value
+    if (param && param.name) {
+      config[param.type][param.name] = param.value
+    }
   }
   fs.writeFileSync(path, beautify(config, null, 2, 10))
+}
+
+function parseParameters (config) {
+  let parameters = []
+  Object.keys(config.public).forEach((key) => {
+    parameters.push({
+      name: key,
+      type: 'public',
+      value: config.public[key]
+    })
+  })
+  Object.keys(config.secret).forEach((key) => {
+    parameters.push({
+      name: key,
+      type: 'secret',
+      value: config.secret[key]
+    })
+  })
+  return parameters
 }
 
 async function updateUnit (unitName, user, newContent) {
   try {
     let deploy = await getDeploy(unitName, user)
     if (!deploy) return null // @TODO: create deploy here
-    console.log('[CONTENT]'.debug, newContent)
-    console.log('[DEPLOY]'.debug, JSON.stringify(deploy))
+    log.trace('[CONTENT]'.debug, newContent)
+    log.trace('[DEPLOY]'.debug, JSON.stringify(deploy))
     let options = {
       method: 'PATCH',
       url: user.server + '/' + path.join('api', 'units', user.login, unitName),
@@ -162,21 +199,25 @@ async function updateUnit (unitName, user, newContent) {
         full_name: user.login + '/' + unitName
       }
     }
-    console.log('[OPTIONS]'.debug, options)
+    log.trace('[OPTIONS]'.debug, options)
     return await request(options)
   } catch (err) {
-    console.error(err, err.stack)
+    log.error(err, err.stack)
   }
 }
 
 function getContent (file) {
-  let name = path.parse(file).name
-  let content = fs.readFileSync(file, 'utf-8')
-  switch (name) {
-    case 'index': return {'code': content}
-    case 'readme': return {'readme': content}
-    case 'config': return {'parameters': content}
-    default: return null
+  try {
+    let name = path.parse(file).name
+    let content = fs.readFileSync(file, 'utf-8')
+    switch (name) {
+      case 'index': return {code: content}
+      case 'readme': return {readme: content}
+      case 'config': return {parameters: parseParameters(JSON.parse(content))}
+      default: return null
+    }
+  } catch (error) {
+    log.error(error)
   }
 }
 
@@ -212,8 +253,8 @@ function question (question) {
 async function askUserToLogin () {
   let user = {}
   let defaultPath = path.join(process.cwd(), 'units')
-  console.log('Hi! It seems you try to start Unit-cli first time')
-  console.log('Enter your UnitCluster login and API key ')
+  log.info('Hi! It seems you try to start Unit-cli first time')
+  log.info('Enter your UnitCluster login and API key ')
   user.login = await question('Login: ')
   user.key = await question('API key: ')
   user.path = await question('Folder to sync your units to [' + defaultPath + ']: ')
@@ -266,7 +307,7 @@ async function runUnit (unitName, user) {
 
 async function runDeploy (name, user) {
   if (!name) return
-  console.log('[RUN UNIT]', name)
+  log.debug('[RUN UNIT]'.debug, name)
   let result
   try {
     let options = {
@@ -276,33 +317,33 @@ async function runDeploy (name, user) {
         Authorization: 'UCKEY ' + user.key
       }
     }
-    console.log('GET'.red, options.url)
+    log.debug('GET'.red, options.url)
     try {
       result = await request(options)
     } catch (requestError) {
       let error = JSON.parse(requestError.error)
-      console.error('[Module %s error] '.error + error.error, name)
-      if (error.position.line) { console.error('at line', error.position.line) } else { console.error('%s'.error, error.position) }
+      log.error('[Module %s error] '.error + error.error, name)
+      if (error.position.line) { log.error('at line', error.position.line) } else { log.error('%s'.error, error.position) }
     }
   } catch (error) {
-    console.error(error)
+    log.error(error)
   }
   if (!result) return
-  console.log('[ %s ]'.info, name, result)
+  log.info('[ %s ]'.info, name, result)
   return result
 }
 
 async function printUnitLogs (unitName, user) {
   let url = urlConstructor('logs', user, unitName)
-  console.log('[LOG]'.red, url)
+  log.debug('[LOG]'.red, url)
   let logStream = request(url)
   logStream.on('data', (chunk) => {
     // Parse logs
     if (chunk.toString().substring(0, 5) === 'data:') {
       let message = JSON.parse(chunk.toString().substring(5))
       if (message.log) {
-        console.log('[ %s ]'.info, message.ts)
-        console.log('[ %s ] :'.info, message.slot, message.log)
+        log.info('[ %s ]'.info, message.ts)
+        log.info('[ %s ] :'.info, message.slot, message.log)
       }
       if (message.memory || message.cpu) {
         // do something with stats
@@ -310,8 +351,8 @@ async function printUnitLogs (unitName, user) {
     }
   })
   logStream.on('end', () => {
-    console.log('[ %s-%s ]'.info, unitName, moment().format())
-    console.log('End of logs')
+    log.debug('[ %s-%s ]'.info, unitName, moment().format())
+    log.debug('End of logs')
   })
 }
 
@@ -337,14 +378,14 @@ async function createNewDeploy (unitName, user, isPublic) {
       full_name: user.login + '/' + unitName
     }
   }
-  console.log('GET'.red, options)
+  log.debug('GET'.red, options)
   let result
   try {
     result = await request(options)
   } catch (error) {
-    console.error(error)
+    log.error(error)
   }
-  console.log(result)
+  log.trace(result)
   return JSON.parse(result)
 }
 
@@ -390,7 +431,7 @@ function createUnitsPath (path) {
       fs.mkdirSync(path)
     }
   } catch (err) {
-    console.error(err, err.stack)
+    log.error(err, err.stack)
     throw new Error('Cannot create directory, check permisions')
   }
 }
@@ -409,58 +450,82 @@ function watchKeypressed (input, events) {
   input.resume()
 }
 
+function compareParameters (params1, params2) {
+  try {
+    if (params1.length !== params2.length) return false
+    for (let i in params1) {
+      if (params1[i].name === params2[i].name &&
+        params1[i].value === params2[i].value &&
+        params1[i].type === params2[i].type) {
+        return false
+      }
+    }
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
 function watchUnits (user, unitUpdated) {
   watch(user.path, { recursive: true }, async (evt, filePath) => {
     if (notDuplicateEvent(filePath)) {
       let file = path.parse(filePath)
-      console.log('%s changed'.debug, file.base)
-      console.log('in %s'.debug, file.dir)
+      log.debug('%s changed'.debug, file.base)
+      log.debug('in %s'.debug, file.dir)
       let unitName = file.dir.replace(user.path + '/', '')
       let content = getContent(filePath)
       if (content) {
-        console.log(content)
-        console.log('Changes in "'.debug + unitName + '", updating...'.debug)
+        log.trace(content)
+        log.info('Changes in "'.debug + unitName + '", updating...'.debug)
         let result = await updateUnit(unitName, user, content) // here should be object like {code: "let a..."} or {readme:}
         let key = _.keys(content)[0]
-        if (JSON.parse(result)[key] !== content[key]) {
-          // console.log(key, JSON.parse(result), content)
-          console.error('Unit not saved'.error)
+        log.trace('[RESULT]'.debug, result)
+        let resultState
+        if (key === 'parameters') {
+          resultState = compareParameters(content.parameters, JSON.parse(result).deployment.parameters)
         } else {
-          console.log('Press', '[Enter]'.cyan, 'to run', colors.info(unitName))
+          resultState = JSON.parse(result)[key] !== content[key]
+        }
+        if (resultState) { // Sceret params are not belongs to unit but to the deployment
+          log.warn('Unit not saved'.error)
+        } else {
+          log.info('Press', '[Enter]'.cyan, 'to run', colors.info(unitName))
           unitUpdated.name = unitName
         }
       }
     }
   })
-  console.log('Watching units in %s for changes...'.debug, user.path)
+  log.info('Watching units in %s for changes...'.debug, user.path)
 }
 
 function checkRunUnit (unitUpdated, user) {
   if (unitUpdated.name) {
     // run unit
     runUnit(unitUpdated.name, user)
-    console.log('[Enter]'.info, unitUpdated.name)
+    log.debug('[Enter]'.info, unitUpdated.name)
   }
 }
 
 async function main () {
   let unitUpdated = { name: null }
   let user
+  log.setDefaultLevel('info')
+  log.setLevel(program.loglevel)
   try {
     user = await init()
   } catch (err) {
-    console.log('Exiting..'.error)
+    log.debug('Exiting..'.error)
     return
   }
 
-  console.log(colors.debug(JSON.stringify(user)))
+  log.trace(colors.debug(JSON.stringify(user)))
 
   updateUserParameters(program, user)
 
   try {
     createUnitsPath(user.path)
   } catch (e) {
-    console.error(e)
+    log.error(e)
     return
   }
 
@@ -475,12 +540,12 @@ async function main () {
     },
     {
       button: 'backspace',
-      fn: console.log,
+      fn: log.debug,
       args: ['Backspace'.info]
     },
     {
       button: 'escape',
-      fn: (a) => { console.log(JSON.stringify(a)) },
+      fn: (a) => { log.debug(JSON.stringify(a)) },
       args: [unitUpdated]
     }
   ])
