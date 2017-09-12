@@ -149,6 +149,7 @@ function saveUnit (unit, dir) {
         watched.push(codeFile, readmeFile, configFile)
       }
     }
+    log.debug(unitPath, codeFile)
     createUnitsPath(unitPath)
     fs.writeFileSync(codeFile, unit.code)
     fs.writeFileSync(readmeFile, unit.readme)
@@ -517,6 +518,19 @@ function checkRunUnit (unitUpdated, user) {
   }
 }
 
+function createEmptyUnit (user, name) {
+  let empty = {
+    name: name,
+    language: 'javascript',
+    code: '',
+    readme: '',
+    parameters: []
+  }
+  saveUnit(empty, user.path)
+  log.info('Unit created at'.debug, colors.strikethrough(user.path + '/' + name), 'you can edit it now'.debug)
+  // @TODO: continue improve module creating
+}
+
 async function main () {
   let unitUpdated = { name: null }
   let user
@@ -532,6 +546,10 @@ async function main () {
   log.trace(colors.debug(JSON.stringify(user)))
 
   updateUserParameters(program, user)
+
+  if (program.new) {
+    createEmptyUnit(user, program.new)
+  }
 
   try {
     createUnitsPath(user.path)
