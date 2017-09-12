@@ -97,7 +97,17 @@ async function getApi (user) {
 
 async function getUnits (user) {
   let units = []
+  let bar = new ProgressBar('Updating [:bar] units :debug', {
+    complete: ' '.bgWhite,
+    incomplete: ' '.bgBlack,
+    // head: ' '.bgBlack,
+    width: 20,
+    total: 20,
+    clear: true
+  })
+  bar.tick(1, {debug: ''})
   let list = await getApi(user, 'users', user.login, 'units')
+  bar.total = list.items.length + 1
   for (let item of list.items) {
     // @TODO: make here some progress bar or something
     let unit
@@ -109,6 +119,7 @@ async function getUnits (user) {
       unit = await getUnit(user, item.name)
     }
     units.push(unit)
+    bar.tick({debug: unit.name})
   }
   return units
 }
