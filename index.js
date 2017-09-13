@@ -22,6 +22,7 @@ const beautify = require('json-beautify')
 const watch = require('node-watch')
 const log = require('loglevel')
 const ProgressBar = require('progress')
+const Ora = require('ora')
 
 colors.setTheme({
   silly: 'rainbow',
@@ -488,7 +489,8 @@ function watchUnits (user, unitUpdated) {
       let content = getContent(filePath)
       if (content) {
         log.trace(content)
-        log.info('Changes in "'.debug + unitName + '", updating...'.debug)
+        let spinner = new Ora('Updating unit ' + colors.cyan(unitName)).start()
+        // log.info('Changes in "'.debug + unitName + '", updating...'.debug)
         let result = await updateUnit(unitName, user, content) // here should be object like {code: "let a..."} or {readme:}
         let key = _.keys(content)[0]
         log.trace('[RESULT]'.debug, result)
@@ -499,9 +501,11 @@ function watchUnits (user, unitUpdated) {
           resultState = JSON.parse(result)[key] !== content[key]
         }
         if (resultState) { // Sceret params are not belongs to unit but to the deployment
-          log.warn('Unit not saved'.error)
+          spinner.fail('Unit not saved'.error)
+          // log.debug('Unit not saved'.error)
         } else {
-          log.info('Press', '[Enter]'.cyan, 'to run', colors.info(unitName))
+          spinner.succeed('Press ' + '[Enter]'.cyan + ' to run ' + colors.info(unitName))
+          // log.info('Press', '[Enter]'.cyan, 'to run', colors.info(unitName))
           unitUpdated.name = unitName
         }
       }
