@@ -24,6 +24,8 @@ const log = require('loglevel')
 const ProgressBar = require('progress')
 const Ora = require('ora')
 
+const PUBLIC_MODULE = true
+
 colors.setTheme({
   silly: 'rainbow',
   input: 'grey',
@@ -49,9 +51,10 @@ program
   .option('-d, --dir [dir]', 'Define path to save units')
   .option('-l, --login [login]', 'Set login to sync units from unitcluster')
   .option('-k, --key [key]', 'Set API key from your Unitcluster account')
-  .option('-n, --new [unit]', 'Create new unit')
+  .option('-n, --new [unit]', 'Create new unit', '')
   .option('-s, --server [server]', 'Set server to work with')
   .option('-o, --loglevel [level]', 'Set level of logs to print', 'info')
+  .option('-r, --remove [unit]', 'Delete unit from unitcluster', '')
   .parse(process.argv)
 
 function urlConstructor (type, user, name) {
@@ -110,7 +113,6 @@ async function getUnits (user) {
   let list = await getApi(user, 'users', user.login, 'units')
   bar.total = list.items.length + 1
   for (let item of list.items) {
-    // @TODO: make here some progress bar or something
     let unit
     let deploy = await getDeploy(item.name, user)
     if (deploy) {
@@ -522,16 +524,44 @@ function checkRunUnit (unitUpdated, user) {
   }
 }
 
-function createEmptyUnit (user, name) {
-  let empty = {
+async function createEmptyUnit (user, name, isPublic) {
+  log.info('Creating new unit', colors.green(name || ' '))
+  if (!name) {
+    name = await question('Unit name: ')
+  }
+  let unit = {
     name: name,
     language: 'javascript',
     code: '',
     readme: '',
     parameters: []
   }
-  saveUnit(empty, user.path)
-  log.info('Unit created at'.debug, colors.strikethrough(user.path + '/' + name), 'you can edit it now'.debug)
+  let description = await question('Unit description: ')
+  let spinner = new Ora('Creating unit'.debug).start()
+  let result
+  try {
+    result = await request
+    .post({
+      url: user.server + '/api/units',
+      headers: {
+        Authorization: 'UCKEY ' + user.key
+      },
+      form: {
+        name: name,
+        description: description,
+        public: isPublic // true by default
+      }
+    })
+    unit = JSON.parse(result)
+    log.debug(result)
+  } catch (error) {
+    spinner.fail('Cannot create unit'.debug)
+    log.trace(error)
+    return false
+  }
+  saveUnit(unit, user.path)
+  spinner.succeed('Unit created at '.debug + colors.inverse(user.path + '/' + unit.name) + ' you can edit it now'.debug)
+  // log.info('Unit created at'.debug, colors.strikethrough(user.path + '/' + name), 'you can edit it now'.debug)
   // @TODO: continue improve module creating
 }
 
@@ -551,8 +581,12 @@ async function main () {
 
   updateUserParameters(program, user)
 
+  if (program.remove) {
+    // @TODO: delete unit
+  }
+
   if (program.new) {
-    createEmptyUnit(user, program.new)
+    await createEmptyUnit(user, program.new, PUBLIC_MODULE) // @TODO: private modules?
   }
 
   try {
