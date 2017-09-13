@@ -1,6 +1,6 @@
-# `unit-cli`
+![Unitcluster logo](http://oi63.tinypic.com/219ri8i.jpg)
 
-## Unitluster.com command line interface :computer: 
+## command line interface :computer: 
 * Create and remove units
 * Edit and debug with  your favorite text editers and IDE
 * Deploy units with single button and it already working!
