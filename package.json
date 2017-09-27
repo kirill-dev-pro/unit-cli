@@ -5,8 +5,11 @@
   "main": "index.js",
   "dependencies": {
     "colors": "^1.1.2",
+    "command-line-args": "^4.0.7",
+    "command-line-commands": "^2.0.1",
     "commander": "^2.11.0",
     "daemon": "^1.1.0",
+    "filehound": "^1.16.2",
     "json-beautify": "^1.0.1",
     "keypress": "^0.2.1",
     "loglevel": "^1.5.0",
@@ -17,6 +20,8 @@
     "progress": "^2.0.0",
     "request": "^2.81.0",
     "request-promise-native": "^1.0.4",
+    "tree-tree": "^2.0.0",
+    "treeify": "^1.0.1",
     "underscore": "^1.8.3"
   },
   "devDependencies": {

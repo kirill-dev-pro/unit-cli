@@ -1,8 +1,9 @@
 ![Unitcluster logo](http://oi63.tinypic.com/219ri8i.jpg)
+[![Build Status](https://travis-ci.org/Zmeu213/unit-cli.svg?branch=master)](https://travis-ci.org/Zmeu213/unit-cli)
 
 ## command line interface :computer: 
 * Create and remove units
-* Edit and debug with  your favorite text editers and IDE
+* Edit and debug with your favorite text editers and IDE
 * Deploy units with single button and it already working!
 
 ### Instalation

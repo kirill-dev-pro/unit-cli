@@ -13,7 +13,6 @@ const program = require('commander')
 const fs = require('fs')
 const path = require('path')
 const request = require('request-promise-native')
-const Readline = require('readline')
 const keypress = require('keypress')
 const colors = require('colors')
 const _ = require('underscore')
@@ -23,8 +22,12 @@ const watch = require('node-watch')
 const log = require('loglevel')
 const ProgressBar = require('progress')
 const Ora = require('ora')
+const commandLineCommands = require('command-line-commands')
 
-const PUBLIC_MODULE = true
+const User = require('./user')
+const { question, printUnits, findLocalUnit } = require('./util')
+
+// const PUBLIC_MODULE = true
 
 colors.setTheme({
   silly: 'rainbow',
@@ -39,10 +42,6 @@ colors.setTheme({
   error: 'red'
 })
 
-const readline = Readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-})
 let watched = []
 let lastEvent = 0
 
@@ -53,8 +52,9 @@ program
   .option('-k, --key [key]', 'Set API key from your Unitcluster account')
   .option('-n, --new [unit]', 'Create new unit', '')
   .option('-s, --server [server]', 'Set server to work with')
-  .option('-o, --loglevel [level]', 'Set level of logs to print', 'info')
+  .option('-o, --loglevel [level]', 'Set level of logs to print [error, warn, info, debug]', 'info')
   .option('-r, --remove [unit]', 'Delete unit from unitcluster', '')
+  .option('-p, --public [boolean]', 'Using with -n defines type of new unit, default true', true)
   .parse(process.argv)
 
 function urlConstructor (type, user, name) {
@@ -75,24 +75,18 @@ function urlConstructor (type, user, name) {
   }
 }
 
-async function getApi (user) {
+async function getApi (user, ...params) {
   try {
-    let apiString = 'api/'
-    let params = _.omit(arguments, '0')
-    apiString += path.join(_.values(params).join('/'))
-    // for (let arg of params) {
-    //   if (typeof arg === 'string') { apiString = path.join(apiString, arg) }
-    // }
-    let options = {
+    const apiString = 'api/' + params.join('/')
+    const options = {
       url: user.server + '/' + apiString,
       method: 'GET',
       headers: {
         Authorization: 'UCKEY ' + user.key
       }
-      // followRedirect: false
     }
     log.debug(colors.red(options.method), options.url)
-    let htmlString = await request(options)
+    const htmlString = await request(options)
     return JSON.parse(htmlString)
   } catch (err) {
     log.error(err, err.stack)
@@ -101,11 +95,11 @@ async function getApi (user) {
 
 async function getUnits (user) {
   let units = []
-  let bar = new ProgressBar('Updating [:bar] units :debug', {
-    complete: ' '.bgWhite,
-    incomplete: ' '.bgBlack,
-    // head: ' '.bgBlack,
-    width: 20,
+  let bar = new ProgressBar('Updating ['.cyan + ':bar' + '] units :debug'.cyan, {
+    complete: '▇',
+    incomplete: '▇'.black,
+    // head: '▇'.white,
+    width: 40,
     total: 20,
     clear: true
   })
@@ -249,60 +243,52 @@ function notDuplicateEvent (filePath) {
 
 // Initial
 
-function getUserHome () {
-  return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'] + '/'
-}
+// function getUserHome () {
+//   return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'] + '/'
+// }
 
-function saveUser (user) {
-  fs.writeFileSync(getUserHome() + '.unit-cli.json', JSON.stringify(user), 'utf-8')
-}
+// function saveUser (user) {
+//   fs.writeFileSync(getUserHome() + '.unit-cli.json', JSON.stringify(user), 'utf-8')
+// }
 
-function question (question) {
-  return new Promise((resolve) => {
-    readline.question(question, (answer) => {
-      resolve(answer)
-    })
-  })
-}
+// async function askUserToLogin () {
+//   let user = {}
+//   let defaultPath = path.join(process.cwd(), 'units')
+//   log.info('Hi! It seems you try to start Unit-cli first time')
+//   log.info('Enter your UnitCluster login and API key ')
+//   user.login = await question('Login: ')
+//   user.key = await question('API key: ')
+//   user.path = await question('Folder to sync your units to [' + defaultPath + ']: ')
+//   if (!user.path) {
+//     user.path = defaultPath
+//   }
+//   // we dont need another server, anyway it could be changed by -s parameter
+//   // user.server = await question('Enter your server [ https://unitcluster.com ]: ')
+//   if (!user.server) {
+//     user.server = 'https://unitcluster.com'
+//   }
+//   saveUser(user)
+//   return user
+// }
 
-async function askUserToLogin () {
-  let user = {}
-  let defaultPath = path.join(process.cwd(), 'units')
-  log.info('Hi! It seems you try to start Unit-cli first time')
-  log.info('Enter your UnitCluster login and API key ')
-  user.login = await question('Login: ')
-  user.key = await question('API key: ')
-  user.path = await question('Folder to sync your units to [' + defaultPath + ']: ')
-  if (!user.path) {
-    user.path = defaultPath
-  }
-  // we dont need another server, anyway it could be changed by -s parameter
-  // user.server = await question('Enter your server [ https://unitcluster.com ]: ')
-  if (!user.server) {
-    user.server = 'https://unitcluster.com'
-  }
-  saveUser(user)
-  return user
-}
+// function getUser () {
+//   let data = fs.readFileSync(getUserHome() + '.unit-cli.json', 'utf-8')
+//   return JSON.parse(data)
+// }
 
-function getUser () {
-  let data = fs.readFileSync(getUserHome() + '.unit-cli.json', 'utf-8')
-  return JSON.parse(data)
-}
-
-async function init () {
-  let user
-  if (!fs.existsSync(getUserHome() + '.unit-cli.json')) {
-    user = await askUserToLogin()
-  } else {
-    user = getUser()
-  }
-  if (user.login && user.key) {
-    return user
-  } else {
-    throw new Error('User import error')
-  }
-}
+// async function init () {
+//   let user
+//   if (!fs.existsSync(getUserHome() + '.unit-cli.json')) {
+//     user = await askUserToLogin()
+//   } else {
+//     user = getUser()
+//   }
+//   if (user.login && user.key) {
+//     return user
+//   } else {
+//     throw new Error('User import error')
+//   }
+// }
 
 // Run Unit on update
 
@@ -404,41 +390,22 @@ async function createNewDeploy (unitName, user, isPublic) {
   return JSON.parse(result)
 }
 
-function updateDeploy (deploy, user, newCode) {
-  request.patch(user.server + '/api/deployed/' + deploy.id)
-    .headers({
-      Authorization: 'UCKEY ' + user.key
-    })
-    .form({
-      code: newCode
-    })
-}
+// function updateDeploy (deploy, user, newCode) {
+//   request.patch(user.server + '/api/deployed/' + deploy.id)
+//     .headers({
+//       Authorization: 'UCKEY ' + user.key
+//     })
+//     .form({
+//       code: newCode
+//     })
+// }
 
-function deleteDeploy (deploy, user) {
-  request.delete(user.server + '/api/deployed/' + deploy.id)
-    .headers({
-      Authorization: 'UCKEY ' + user.key
-    })
-}
-
-// Check for parameters to be changed
-function updateUserParameters (program, user) {
-  if (program.dir || program.key || program.login) {
-    if (program.dir) {
-      user.path = program.dir
-    }
-    if (program.key) {
-      user.key = program.key
-    }
-    if (program.login) {
-      user.login = program.login
-    }
-    if (program.server) {
-      user.server = program.server
-    }
-    saveUser(user)
-  }
-}
+// function deleteDeploy (deploy, user) {
+//   request.delete(user.server + '/api/deployed/' + deploy.id)
+//     .headers({
+//       Authorization: 'UCKEY ' + user.key
+//     })
+// }
 
 function createUnitsPath (path) {
   try {
@@ -513,7 +480,7 @@ function watchUnits (user, unitUpdated) {
       }
     }
   })
-  log.info('Watching units in %s for changes...'.debug, user.path)
+  log.info('Watching units in %s for changes...'.cyan, user.path)
 }
 
 function checkRunUnit (unitUpdated, user) {
@@ -524,7 +491,71 @@ function checkRunUnit (unitUpdated, user) {
   }
 }
 
-async function createEmptyUnit (user, name, isPublic) {
+function parseComands (command, argv, user) {
+  switch (command) {
+    case 'ls':
+    case 'list':
+      printUnits(user, !!argv[0])
+      break
+    case 'rm':
+    case 'remove':
+      deleteUnit(user, argv)
+      break
+    default:
+      log.warn('Wrong command')
+  }
+}
+
+function deleteUnit (user, argv) {
+  const deleteLocalModule = (source) => {
+    try {
+      fs.readdirSync(source).forEach(file => fs.unlinkSync(path.join(source, file)))
+      fs.rmdirSync(source)
+    } catch (err) {
+      log.error('Error while deleting unit localy'.error, source)
+    }
+  }
+
+  const requestDelete = (user, name) => {
+    try {
+      const options = {
+        url: `${user.server}/api/units/${user.login}/${name}`,
+        headers: {
+          Authorization: 'UCKEY ' + user.key
+        },
+        method: 'DELETE'
+      }
+      request(options)
+      return
+    } catch (error) {
+      log.error(`Error while deleting unit "${name}" from server`.error)
+    }
+  }
+
+  const result = argv
+    .map(arg => findLocalUnit(user, arg))
+    .filter(arg => !!arg)
+  result.forEach(source => requestDelete(user, path.parse(source).name))
+  result.forEach(source => deleteLocalModule(source))
+  if (!result.some(path => !!path)) log.warn('No units found'.yellow)
+  else log.info(`Deleted ${argv.join(' ')}`.cyan)
+}
+
+function getLocalUnitsList (user) {
+  log.info(1)
+  const isDirectory = source => fs.lstatSync(source).isDirectory()
+  const getDirectories = source => fs.readdirSync(source).map(name => path.join(source, name)).filter(isDirectory)
+  return getDirectories(user.path).reduce((units, unitPath) => {
+    const name = path.parse(unitPath).name
+    const content = fs.readdirSync(unitPath)
+    _.extend(units, {children: content})
+    return units
+  }, {})
+}
+
+// @TODO: store unit information
+
+async function createNewUnit (user, name, isPublic) {
   log.info('Creating new unit', colors.green(name || ' '))
   if (!name) {
     name = await question('Unit name: ')
@@ -567,11 +598,11 @@ async function createEmptyUnit (user, name, isPublic) {
 
 async function main () {
   let unitUpdated = { name: null }
-  let user
+  let user = new User()
   log.setDefaultLevel('info')
   log.setLevel(program.loglevel)
   try {
-    user = await init()
+    await user.init()
   } catch (err) {
     log.debug('Exiting..'.error)
     return
@@ -579,14 +610,23 @@ async function main () {
 
   log.trace(colors.debug(JSON.stringify(user)))
 
-  updateUserParameters(program, user)
+  user.updateParameters(program)
+
+  const validCommands = [ null, 'ls', 'list', 'rm', 'remove', 'help' ]
+  const { command, argv } = commandLineCommands(validCommands)
+  console.log('command: %s', command)
+  console.log('argv:    %s', JSON.stringify(argv))
+  if (command) {
+    parseComands(command, argv, user)
+    return
+  }
 
   if (program.remove) {
     // @TODO: delete unit
   }
 
   if (program.new) {
-    await createEmptyUnit(user, program.new, PUBLIC_MODULE) // @TODO: private modules?
+    await createNewUnit(user, program.new, program.public) // @TODO: private modules?
   }
 
   try {
