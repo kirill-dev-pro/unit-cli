@@ -1,14 +1,26 @@
 const User = require('../user')
 const fs = require('fs')
-const {beforeAll, afterAll, test, expect} = require('jest')
+// const {beforeAll, afterAll, test, expect} = require('jest')
+const defaultPath = process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME']
+const testUser = { user: {
+  login: 'aaa',
+  key: 'bbb',
+  server: 'ccc',
+  path: defaultPath + '/units'
+}}
 
 beforeAll(() => {
-  const defaultPath = 
-  if (fs.existsSync())
+  if (fs.existsSync(defaultPath + '/.unit-cli.json')) {
+    fs.renameSync(defaultPath + '/.unit-cli.json', defaultPath + '/.unit-cli.json.backup')
+  }
+  fs.writeFileSync(defaultPath + '/.unit-cli.json', JSON.stringify(testUser), 'utf-8')
 })
 
 afterAll(() => {
-  
+  fs.unlinkSync(defaultPath + '/.unit-cli.json')
+  if (fs.existsSync(defaultPath + '/.unit-cli.json.backup')) {
+    fs.renameSync(defaultPath + '/.unit-cli.json.backup', defaultPath + '/.unit-cli.json')
+  }
 })
 
 test('creates user', () => {
