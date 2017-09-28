@@ -24,7 +24,7 @@ const Ora = require('ora')
 const commandLineCommands = require('command-line-commands')
 
 const User = require('./user')
-const { question, printUnits, findLocalUnit } = require('./util')
+const { question, printUnits, findLocalUnit, closeReadline } = require('./util')
 
 // const PUBLIC_MODULE = true
 
@@ -92,17 +92,17 @@ async function getApi (user, ...params) {
   }
 }
 
-async function getUnitsAndDeploy (user) {
-  return await getApi(user, 'users', user.login, 'sync')
-}
+// async function getUnitsAndDeploy (user) {
+//   return await getApi(user, 'users', user.login, 'sync')
+// }
 
-async function getAvailableUnits (user) {
-  return await getApi(user, 'units')
-}
+// async function getAvailableUnits (user) {
+//   return await getApi(user, 'units')
+// }
 
-async function getUnit (user, name) {
-  return await getApi(user, 'units', user.login, name)
-}
+// async function getUnit (user, name) {
+//   return await getApi(user, 'units', user.login, name)
+// }
 
 function saveUnits (units, dir) {
   for (let unit of units) {
@@ -392,7 +392,7 @@ function watchKeypressed (input, events) {
       }
     })
   }
-  input.setRawMode(true)
+  // input.setRawMode(true)
   input.resume()
 }
 
@@ -631,6 +631,8 @@ async function main () {
   ])
 
   watchUnits(user, unitUpdated)
+
+  closeReadline()
 }
 
 main()

@@ -12,10 +12,17 @@ const readline = Readline.createInterface({
   input: process.stdin,
   output: process.stdout
 })
+readline.pause()
+
+module.exports.closeReadline = () => {
+  readline.close()
+}
 
 module.exports.question = (question) => {
   return new Promise((resolve) => {
+    readline.resume()
     readline.question(question, (answer) => {
+      readline.pause()
       resolve(answer)
     })
   })
