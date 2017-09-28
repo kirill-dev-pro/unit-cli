@@ -20,7 +20,6 @@ const moment = require('moment')
 const beautify = require('json-beautify')
 const watch = require('node-watch')
 const log = require('loglevel')
-const ProgressBar = require('progress')
 const Ora = require('ora')
 const commandLineCommands = require('command-line-commands')
 
