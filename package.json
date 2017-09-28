@@ -25,10 +25,11 @@
     "underscore": "^1.8.3"
   },
   "devDependencies": {
+    "jest": "^21.2.0",
     "standard": "^10.0.3"
   },
   "scripts": {
-    "test": "standard"
+    "test": "jest"
   },
   "repository": {
     "type": "git",

@@ -93,64 +93,65 @@ async function getApi (user, ...params) {
   }
 }
 
-async function getUnits (user) {
-  let units = []
-  let bar = new ProgressBar('Updating ['.cyan + ':bar' + '] units :debug'.cyan, {
-    complete: '▇',
-    incomplete: '▇'.black,
-    // head: '▇'.white,
-    width: 40,
-    total: 20,
-    clear: true
-  })
-  bar.tick(1, {debug: ''})
-  let list = await getApi(user, 'users', user.login, 'units')
-  bar.total = list.items.length + 1
-  for (let item of list.items) {
-    let unit
-    let deploy = await getDeploy(item.name, user)
-    if (deploy) {
-      unit = deploy.unit
-      unit.parameters = deploy.parameters
-    } else {
-      unit = await getUnit(user, item.name)
-    }
-    units.push(unit)
-    bar.tick({debug: unit.name})
-  }
-  return units
+async function getUnitsAndDeploy (user) {
+  return await getApi(user, 'users', user.login, 'sync')
+}
+
+async function getAvailableUnits (user) {
+  return await getApi(user, 'units')
 }
 
 async function getUnit (user, name) {
-  let unit = getApi(user, 'units', user.login, name)
-  return unit
+  return await getApi(user, 'units', user.login, name)
 }
 
 function saveUnits (units, dir) {
   for (let unit of units) {
-    saveUnit(unit, dir)
+    if (unit.deploys[0]) {
+      saveUnit(unit, dir)
+    }
   }
+}
+
+async function updateUnits (user) {
+  const getUnitsAndDeploy = async user => await getApi(user, 'users', user.login, 'sync')
+  const getAvailableUnits = async user => await getApi(user, 'units')
+  const appendToArray = (array, unit) => { array.push(unit.id); return array }
+
+  const spinner = new Ora('Updating units'.cyan).start()
+  let ids
+  try {
+    const available = (await getAvailableUnits(user)).items
+    ids = available.reduce(appendToArray, [])
+  } catch (err) {
+    spinner.fail('Error while getting units'.error).stop()
+    throw err
+  }
+  spinner.text = 'Saving units'.cyan
+  try {
+    const units = (await getUnitsAndDeploy(user)).filter(unit => ids.indexOf(unit.id) > -1)
+    saveUnits(units, user.path)
+  } catch (err) {
+    spinner.fail('Error while saving units'.error).stop()
+    throw err
+  }
+  spinner.succeed('Units updated'.cyan)
 }
 
 function saveUnit (unit, dir) {
   try {
-    let unitPath = path.join(dir, unit.name)
-    let codeFile
-    let readmeFile
-    let configFile
-    if (unit.language === 'javascript') {
-      codeFile = unitPath + '/index.js'
-      readmeFile = unitPath + '/readme.md'
-      configFile = unitPath + '/config.json'
-      if (watched.indexOf(codeFile) === -1) {
-        watched.push(codeFile, readmeFile, configFile)
-      }
+    const unitPath = path.join(dir, unit.name)
+    const codeFile = unitPath + '/index.js'
+    const readmeFile = unitPath + '/readme.md'
+    const configFile = unitPath + '/config.json'
+    if (watched.indexOf(codeFile) === -1) {
+      watched.push(codeFile, readmeFile, configFile)
     }
     log.debug(unitPath, codeFile)
     createUnitsPath(unitPath)
     fs.writeFileSync(codeFile, unit.code)
     fs.writeFileSync(readmeFile, unit.readme)
-    saveParameters(configFile, unit.parameters ? unit.parameters : [])
+    saveParameters(configFile, unit.deploys[0] ? unit.deploys[0].parameters : [])
   } catch (err) {
     log.error(err, err.stack)
   }
@@ -211,22 +212,30 @@ async function updateUnit (unitName, user, newContent) {
     log.trace('[OPTIONS]'.debug, options)
     return await request(options)
   } catch (err) {
-    log.error(err, err.stack)
+    log.error('Error while updating unit')
+    log.debug(err, err.stack)
   }
 }
 
 function getContent (file) {
   try {
-    let name = path.parse(file).name
-    let content = fs.readFileSync(file, 'utf-8')
+    const unit = path.parse(path.parse(file).dir).name + '/' + path.parse(file).base
+    const name = path.parse(file).name
+    const content = fs.readFileSync(file, 'utf-8')
     switch (name) {
       case 'index': return {code: content}
       case 'readme': return {readme: content}
-      case 'config': return {parameters: parseParameters(JSON.parse(content))}
+      case 'config': {
+        try {
+          return {parameters: parseParameters(JSON.parse(content))}
+        } catch (err) {
+          throw err.message.replace('\n ', '').replace('JSON', unit).error
+        }
+      }
       default: return null
     }
   } catch (error) {
-    log.error(error)
+    throw error
   }
 }
 
@@ -240,55 +249,6 @@ function notDuplicateEvent (filePath) {
     return false
   }
 }
-
-// Initial
-
-// function getUserHome () {
-//   return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'] + '/'
-// }
-
-// function saveUser (user) {
-//   fs.writeFileSync(getUserHome() + '.unit-cli.json', JSON.stringify(user), 'utf-8')
-// }
-
-// async function askUserToLogin () {
-//   let user = {}
-//   let defaultPath = path.join(process.cwd(), 'units')
-//   log.info('Hi! It seems you try to start Unit-cli first time')
-//   log.info('Enter your UnitCluster login and API key ')
-//   user.login = await question('Login: ')
-//   user.key = await question('API key: ')
-//   user.path = await question('Folder to sync your units to [' + defaultPath + ']: ')
-//   if (!user.path) {
-//     user.path = defaultPath
-//   }
-//   // we dont need another server, anyway it could be changed by -s parameter
-//   // user.server = await question('Enter your server [ https://unitcluster.com ]: ')
-//   if (!user.server) {
-//     user.server = 'https://unitcluster.com'
-//   }
-//   saveUser(user)
-//   return user
-// }
-
-// function getUser () {
-//   let data = fs.readFileSync(getUserHome() + '.unit-cli.json', 'utf-8')
-//   return JSON.parse(data)
-// }
-
-// async function init () {
-//   let user
-//   if (!fs.existsSync(getUserHome() + '.unit-cli.json')) {
-//     user = await askUserToLogin()
-//   } else {
-//     user = getUser()
-//   }
-//   if (user.login && user.key) {
-//     return user
-//   } else {
-//     throw new Error('User import error')
-//   }
-// }
 
 // Run Unit on update
 
@@ -335,15 +295,20 @@ async function runDeploy (name, user) {
 }
 
 async function printUnitLogs (unitName, user) {
-  let url = urlConstructor('logs', user, unitName)
+  const url = urlConstructor('logs', user, unitName)
   log.debug('[LOG]'.red, url)
-  let logStream = request(url)
+  const logStream = request(url)
+  let lastTs = null
   logStream.on('data', (chunk) => {
     // Parse logs
+    log.debug(chunk.toString())
     if (chunk.toString().substring(0, 5) === 'data:') {
       let message = JSON.parse(chunk.toString().substring(5))
       if (message.log) {
-        log.info('[ %s ]'.info, message.ts)
+        if (lastTs !== message.ts) {
+          log.info('[ %s ]'.info, message.ts)
+          lastTs = message.ts
+        }
         log.info('[ %s ] :'.info, message.slot, message.log)
       }
       if (message.memory || message.cpu) {
@@ -451,18 +416,23 @@ function compareParameters (params1, params2) {
 function watchUnits (user, unitUpdated) {
   watch(user.path, { recursive: true }, async (evt, filePath) => {
     if (notDuplicateEvent(filePath)) {
-      let file = path.parse(filePath)
+      const file = path.parse(filePath)
+      const unitName = file.dir.replace(user.path + '/', '')
       log.debug('%s changed'.debug, file.base)
       log.debug('in %s'.debug, file.dir)
-      let unitName = file.dir.replace(user.path + '/', '')
-      let content = getContent(filePath)
+      const spinner = new Ora('Updating unit ' + colors.cyan(unitName)).start()
+      let content
+      try {
+        content = getContent(filePath)
+      } catch (err) {
+        spinner.fail(err)
+      }
       if (content) {
-        log.trace(content)
-        let spinner = new Ora('Updating unit ' + colors.cyan(unitName)).start()
+        log.debug(content)
         // log.info('Changes in "'.debug + unitName + '", updating...'.debug)
         let result = await updateUnit(unitName, user, content) // here should be object like {code: "let a..."} or {readme:}
         let key = _.keys(content)[0]
-        log.trace('[RESULT]'.debug, result)
+        log.debug('[RESULT]'.debug, result)
         let resultState
         if (key === 'parameters') {
           resultState = compareParameters(content.parameters, JSON.parse(result).deployment.parameters)
@@ -614,8 +584,8 @@ async function main () {
 
   const validCommands = [ null, 'ls', 'list', 'rm', 'remove', 'help' ]
   const { command, argv } = commandLineCommands(validCommands)
-  console.log('command: %s', command)
-  console.log('argv:    %s', JSON.stringify(argv))
+  log.debug('command: %s', command)
+  log.debug('argv:    %s', JSON.stringify(argv))
   if (command) {
     parseComands(command, argv, user)
     return
@@ -636,8 +606,12 @@ async function main () {
     return
   }
 
-  let units = await getUnits(user)
-  saveUnits(units, user.path)
+  try {
+    await updateUnits(user)
+  } catch (err) {
+    log.debug(err)
+    return
+  }
 
   watchKeypressed(process.stdin, [
     {
