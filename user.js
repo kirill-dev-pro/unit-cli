@@ -58,19 +58,19 @@ module.exports = class User {
     fs.writeFileSync(this.getUserConfigPath(), JSON.stringify(config), 'utf-8')
   }
 
-  updateParameters (program) {
-    if (program.dir || program.key || program.login) {
-      if (program.dir) {
-        this.path = program.dir
+  updateParameters (config) {
+    if (config.dir || config.key || config.login) {
+      if (config.dir) {
+        this.path = config.dir
       }
-      if (program.key) {
-        this.key = program.key
+      if (config.key) {
+        this.key = config.key
       }
-      if (program.login) {
-        this.login = program.login
+      if (config.login) {
+        this.login = config.login
       }
-      if (program.server) {
-        this.server = program.server
+      if (config.server) {
+        this.server = config.server
       }
       this.save()
     }

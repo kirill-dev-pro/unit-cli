@@ -17,14 +17,14 @@ const keypress = require('keypress')
 const colors = require('colors')
 const _ = require('underscore')
 const moment = require('moment')
-const beautify = require('json-beautify')
 const watch = require('node-watch')
 const log = require('loglevel')
 const Ora = require('ora')
 const commandLineCommands = require('command-line-commands')
 
 const User = require('./user')
-const { question, printUnits, findLocalUnit, closeReadline } = require('./util')
+const { question, printUnits, findLocalUnit, closeReadline, getApi, createDirIfNotExist, urlConstructor } = require('./util')
+const {syncUnits} = require('./units')
 
 // const PUBLIC_MODULE = true
 
@@ -56,42 +56,6 @@ program
   .option('-p, --public [boolean]', 'Using with -n defines type of new unit, default true', true)
   .parse(process.argv)
 
-function urlConstructor (type, user, name) {
-  let url
-  if (type === 'logs' || type === 'run') {
-    if (/unitcluster\.com/.test(user.server)) {
-      url = 'https://' + user.login + '.unit.run/' + name
-    } else {
-      url = user.server.replace('//', '//' + user.login + '.').replace('https', 'http') + '/' + name
-    }
-    if (type === 'logs') {
-      url += '/logs'
-    }
-    if (user.key) {
-      url += '?key=' + user.key
-    }
-    return url
-  }
-}
-
-async function getApi (user, ...params) {
-  try {
-    const apiString = 'api/' + params.join('/')
-    const options = {
-      url: user.server + '/' + apiString,
-      method: 'GET',
-      headers: {
-        Authorization: 'UCKEY ' + user.key
-      }
-    }
-    log.debug(colors.red(options.method), options.url)
-    const htmlString = await request(options)
-    return JSON.parse(htmlString)
-  } catch (err) {
-    log.error(err, err.stack)
-  }
-}
-
 // async function getUnitsAndDeploy (user) {
 //   return await getApi(user, 'users', user.login, 'sync')
 // }
@@ -103,71 +67,6 @@ async function getApi (user, ...params) {
 // async function getUnit (user, name) {
 //   return await getApi(user, 'units', user.login, name)
 // }
-
-function saveUnits (units, dir) {
-  for (let unit of units) {
-    if (unit.deploys[0]) {
-      saveUnit(unit, dir)
-    }
-  }
-}
-
-async function updateUnits (user) {
-  const getUnitsAndDeploy = async user => await getApi(user, 'users', user.login, 'sync')
-  const getAvailableUnits = async user => await getApi(user, 'units')
-  const appendToArray = (array, unit) => { array.push(unit.id); return array }
-
-  const spinner = new Ora('Updating units'.cyan).start()
-  let ids
-  try {
-    const available = (await getAvailableUnits(user)).items
-    ids = available.reduce(appendToArray, [])
-  } catch (err) {
-    spinner.fail('Error while getting units'.error).stop()
-    throw err
-  }
-  spinner.text = 'Saving units'.cyan
-  try {
-    const units = (await getUnitsAndDeploy(user)).filter(unit => ids.indexOf(unit.id) > -1)
-    saveUnits(units, user.path)
-  } catch (err) {
-    spinner.fail('Error while saving units'.error).stop()
-    throw err
-  }
-  spinner.succeed('Units updated'.cyan)
-}
-
-function saveUnit (unit, dir) {
-  try {
-    const unitPath = path.join(dir, unit.name)
-    const codeFile = unitPath + '/index.js'
-    const readmeFile = unitPath + '/readme.md'
-    const configFile = unitPath + '/config.json'
-    if (watched.indexOf(codeFile) === -1) {
-      watched.push(codeFile, readmeFile, configFile)
-    }
-    log.debug(unitPath, codeFile)
-    createUnitsPath(unitPath)
-    fs.writeFileSync(codeFile, unit.code)
-    fs.writeFileSync(readmeFile, unit.readme)
-    saveParameters(configFile, unit.deploys[0] ? unit.deploys[0].parameters : [])
-  } catch (err) {
-    log.error(err, err.stack)
-  }
-}
-
-function saveParameters (path, parameters) {
-  let config = {
-    secret: {},
-    public: {}
-  }
-  for (let param of parameters) {
-    if (param && param.name) {
-      config[param.type][param.name] = param.value
-    }
-  }
-  fs.writeFileSync(path, beautify(config, null, 2, 10))
-}
 
 function parseParameters (config) {
   let parameters = []
@@ -371,17 +270,6 @@ async function createNewDeploy (unitName, user, isPublic) {
 //     })
 // }
 
-function createUnitsPath (path) {
-  try {
-    if (!fs.existsSync(path)) {
-      fs.mkdirSync(path)
-    }
-  } catch (err) {
-    log.error(err, err.stack)
-    throw new Error('Cannot create directory, check permisions')
-  }
-}
-
 function watchKeypressed (input, events) {
   keypress(input)
   for (let event of events) {
@@ -510,18 +398,6 @@ function deleteUnit (user, argv) {
   else log.info(`Deleted ${argv.join(' ')}`.cyan)
 }
 
-function getLocalUnitsList (user) {
-  log.info(1)
-  const isDirectory = source => fs.lstatSync(source).isDirectory()
-  const getDirectories = source => fs.readdirSync(source).map(name => path.join(source, name)).filter(isDirectory)
-  return getDirectories(user.path).reduce((units, unitPath) => {
-    const name = path.parse(unitPath).name
-    const content = fs.readdirSync(unitPath)
-    _.extend(units, {children: content})
-    return units
-  }, {})
-}
-
 // @TODO: store unit information
 
 async function createNewUnit (user, name, isPublic) {
@@ -590,23 +466,19 @@ async function main () {
     return
   }
 
-  if (program.remove) {
-    // @TODO: delete unit
-  }
-
   if (program.new) {
     await createNewUnit(user, program.new, program.public) // @TODO: private modules?
   }
 
   try {
-    createUnitsPath(user.path)
+    createDirIfNotExist(user.path)
   } catch (e) {
     log.error(e)
     return
   }
 
   try {
-    await updateUnits(user)
+    await syncUnits(user, watched)
   } catch (err) {
     log.debug(err)
     return
