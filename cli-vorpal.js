@@ -14,7 +14,7 @@ const { notDuplicateEvent, getContent, compareParameters } = require('./util')
 const { printUnits, syncUnits, createNewUnit, updateUnit, deleteUnit } = require('./units')
 
 let watched = []
-let watcher
+let watcher = {fileHound: null}
 let lastEvent = 0
 let unitUpdated = { name: null }
 
@@ -97,12 +97,12 @@ const spinnerWrap = async (startMessage, successMessage, asyncFn, ...params) => 
   spinner.succeed(typeof successMessage === 'function' ? successMessage(result).cyan : successMessage.cyan)
 }
 
-const pauseWatcherWrap = async (watcher, fn, reopenWatcher) => {
-  if (watcher) {
-    if (!watcher.isClosed()) watcher.close()
+const pauseWatcherWrap = async (fn, reopenWatcher, watcher) => {
+  if (watcher.fileHound) {
+    if (!watcher.fileHound.isClosed()) watcher.fileHound.close()
   }
   await fn()
-  if (reopenWatcher) watcher = reopenWatcher()
+  if (reopenWatcher) watcher.fileHound = reopenWatcher()
 }
 
 async function main () {
@@ -126,14 +126,14 @@ async function main () {
   }
 
   const deleteUnitAction = args => spinnerWrap('Deleting...', (units) => `Deleted ${units}`, deleteUnit, user, args.units)
-  const syncUnitsAction = async () => pauseWatcherWrap(watcher, spinnerWrap.bind(null, 'Updating units', 'Units updated', syncUnits, user, watched),
-                                                      watchUnits.bind(null, user, unitUpdated, vorpal)) // yeah, complicated
+  const syncUnitsAction = async () => pauseWatcherWrap(spinnerWrap.bind(null, 'Updating units', 'Units updated', syncUnits, user, watched),
+                                                      watchUnits.bind(null, user, unitUpdated, vorpal), watcher) // yeah, complicated
   const createUnitAction = async (args) => spinnerWrap('Creating unit', (path) => `Unit created at ${path}`,
                                                         createNewUnit, user, watched, args.name, args.description, args.isPrivate)
   const printUnitsAction = (args) => printUnits(user, args.level)
   const updateUserAction = (args) => log.info(args)
   const logArgs = args => log.info(args)
-  const logUser = () => log.info(user)
+  const printUserAction = () => log.info(user)
 
   function startVorpal () {
     const vorpal = new Vorpal()
@@ -150,7 +150,7 @@ async function main () {
     vorpal.command('run <unit>', 'Updates units from server')
       .action(handler.bind(this, logArgs))
     vorpal.command('user', 'Shows user information')
-      .action(handler.bind(this, logUser))
+      .action(handler.bind(this, printUserAction))
     vorpal.delimiter('unit-cli-$')
     return vorpal
   }
@@ -159,9 +159,9 @@ async function main () {
   log.setLevel(program.loglevel)
   const user = new User()
   await user.init()
-  if (program.sync) await syncUnitsAction(user, watched)
   const vorpal = startVorpal()
-  watcher = watchUnits(user, unitUpdated, vorpal)
+  if (program.sync) await syncUnitsAction(user, watched)
+  else watcher.fileHound = watchUnits(user, unitUpdated, vorpal)
   vorpal.show()
 }
 
