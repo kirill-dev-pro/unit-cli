@@ -6,19 +6,17 @@ const colors = require('colors')
 const request = require('request-promise-native')
 const fs = require('fs')
 
-module.exports.getUserConfigPath = () => {
-  return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'] + '/.unit-cli.json'
-}
-
 let readline = {}
-//  = Readline.createInterface({
-//   input: process.stdin,
-//   output: process.stdout
-// })
-// readline.pause()
 
 module.exports.closeReadline = () => {
   readline.close()
+}
+
+const authUser = (user) => ({Authorization: 'UCKEY ' + user.key})
+module.exports.authUser = authUser
+
+module.exports.getUserConfigPath = () => {
+  return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'] + '/.unit-cli.json'
 }
 
 const startReadline = Readline => Readline.createInterface({ input: process.stdin, output: process.stdout })
@@ -50,9 +48,7 @@ module.exports.getApi = async (user, ...params) => {
     const options = {
       url: user.server + '/api/' + params.join('/'),
       method: 'GET',
-      headers: {
-        Authorization: 'UCKEY ' + user.key
-      }
+      headers: authUser(user)
     }
     log.debug(colors.red(options.method), options.url)
     return JSON.parse(await request(options))
@@ -151,3 +147,4 @@ module.exports.compareParameters = (params1, params2) => {
     return false
   }
 }
+
