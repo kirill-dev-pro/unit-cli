@@ -15,16 +15,30 @@ Then use it like any other console command
 ```
 unit-cli
 ```
+
+### Basic usage
+
 In the first run it will ask provide you account information from unitcluster.com, 
 such as API token which you could find on https://unitcluster.com/account/settings and login
 
-Create new unit with `-n [unit name]` or `--new [unit name]` option
+First new unit with `new [unit] [description]` command inside cli
 ```
-unit-cli -n helloWorld
+unit-cli-$ new greeter-unit "Hello world unitcluster app"
 ```
-Then enter description and its done :rocket: 
-
-### Basic usage
-Start `unit-cli` and let it observe your files while you working. It will automaticly update your unit in the cloud 
-and when you are done save local changes, switch back to console with `unit-cli` and press `Enter` button to run your unit. 
-Logs and result of the unit will be printed right there
+`Unit-cli` will create new folder inside your units folder that you provided at login. Also it will output to you path to this folder like this
+```
+✔ Unit created at /path/to/your/units/directory/greeter-unit
+```
+Then edit unit files. For example paste this to your `greeter-unit/index.js`
+```
+module.exports = unit => unit.done(null, 'Hello world!')
+```
+Right after you save changes on your computer `unit-cli` will update unit and show you how to run it
+```
+✔ Press [Ctrl + R] or type [run greeter-unit] to run greeter-unit
+```
+Press shortcut on keybord or type `run [unit name]` to run your unit and get output from it right into your console
+```
+[ greeter-unit-result ] Hello world!
+```
+Its done :rocket: 
