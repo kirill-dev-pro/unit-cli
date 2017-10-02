@@ -21,11 +21,11 @@ unit-cli
 In the first run it will ask provide you account information from unitcluster.com, 
 such as API token which you could find on https://unitcluster.com/account/settings and login
 
-First new unit with `new [unit] [description]` command inside cli
+First create new unit with `new [unit] [description]` command inside cli
 ```
 unit-cli-$ new greeter-unit "Hello world unitcluster app"
 ```
-`Unit-cli` will create new folder inside your units folder that you provided at login. Also it will output to you path to this folder like this
+`unit-cli` will create new folder inside your units folder that you provided at login. Also it will output to you path to this folder like this
 ```
 ✔ Unit created at /path/to/your/units/directory/greeter-unit
 ```

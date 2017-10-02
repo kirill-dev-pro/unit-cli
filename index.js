@@ -25,7 +25,7 @@ colors.setTheme({
 })
 
 program
-  .version('0.1.0')
+  .version('1.0.0')
   // .option('--no-sync', 'Disable sync at start', false)  // disabled for capability
   .option('-d, --dir [dir]', 'Define path to save units')
   .option('-l, --login [login]', 'Set login to sync units from unitcluster')
