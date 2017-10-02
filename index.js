@@ -23,7 +23,7 @@ const Ora = require('ora')
 const commandLineCommands = require('command-line-commands')
 
 const User = require('./user')
-const { question, printUnits, findLocalUnit, closeReadline, getApi, createDirIfNotExist, urlConstructor } = require('./util')
+const { printUnits, findLocalUnit, closeReadline, getApi, createDirIfNotExist, urlConstructor } = require('./util')
 const {syncUnits} = require('./units')
 
 // const PUBLIC_MODULE = true
@@ -399,47 +399,6 @@ function deleteUnit (user, argv) {
 }
 
 // @TODO: store unit information
-
-async function createNewUnit (user, name, isPublic) {
-  log.info('Creating new unit', colors.green(name || ' '))
-  if (!name) {
-    name = await question('Unit name: ')
-  }
-  let unit = {
-    name: name,
-    language: 'javascript',
-    code: '',
-    readme: '',
-    parameters: []
-  }
-  let description = await question('Unit description: ')
-  let spinner = new Ora('Creating unit'.debug).start()
-  let result
-  try {
-    result = await request
-    .post({
-      url: user.server + '/api/units',
-      headers: {
-        Authorization: 'UCKEY ' + user.key
-      },
-      form: {
-        name: name,
-        description: description,
-        public: isPublic // true by default
-      }
-    })
-    unit = JSON.parse(result)
-    log.debug(result)
-  } catch (error) {
-    spinner.fail('Cannot create unit'.debug)
-    log.trace(error)
-    return false
-  }
-  saveUnit(unit, user.path)
-  spinner.succeed('Unit created at '.debug + colors.inverse(user.path + '/' + unit.name) + ' you can edit it now'.debug)
-  // log.info('Unit created at'.debug, colors.strikethrough(user.path + '/' + name), 'you can edit it now'.debug)
-  // @TODO: continue improve module creating
-}
 
 async function main () {
   let unitUpdated = { name: null }

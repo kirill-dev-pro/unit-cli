@@ -1,5 +1,4 @@
 const Readline = require('readline')
-const tree = require('tree-tree')
 const FileHound = require('filehound')
 const log = require('loglevel')
 const path = require('path')
@@ -46,26 +45,6 @@ module.exports.findLocalUnit = (user, name) => {
     .shift()
 }
 
-module.exports.printUnits = (user, level = 0) => {
-  const toObject = (name, children = []) => ({ name: name, children: children })
-  const getSubFiles = (path) => FileHound.create().path(path).findSync()
-  const getLocalUnitsList = (user) => FileHound.create().paths(user.path).directory().findSync()
-
-  if (!user) throw new Error('No user')
-  const units = getLocalUnitsList(user)
-  const list = units.reduce((list, source) => {
-    const name = path.parse(source).name
-    const children = level ? getSubFiles(source).map(file => toObject(path.parse(file).base)) : []
-    list.push(toObject(name, children))
-    return list
-  }, [])
-  try {
-    log.info(tree(toObject(user.login.cyan, list)))
-  } catch (err) {
-    log.error(err)
-  }
-}
-
 module.exports.getApi = async (user, ...params) => {
   try {
     const options = {
@@ -108,5 +87,67 @@ module.exports.urlConstructor = (type, user, name) => {
       url += '?key=' + user.key
     }
     return url
+  }
+}
+
+module.exports.notDuplicateEvent = (filePath, watched, lastEvent) => {
+  const currentTime = Math.floor(new Date() / 1000)
+  return watched.indexOf(filePath) > -1 && lastEvent + 3 < currentTime
+}
+
+module.exports.getContent = (file) => {
+  try {
+    const unit = path.parse(path.parse(file).dir).name + '/' + path.parse(file).base
+    const name = path.parse(file).name
+    const content = fs.readFileSync(file, 'utf-8')
+    switch (name) {
+      case 'index': return {code: content}
+      case 'readme': return {readme: content}
+      case 'config': {
+        try {
+          return {parameters: parseParameters(JSON.parse(content))}
+        } catch (err) {
+          throw err.message.replace('\n ', '').replace('JSON', unit).error
+        }
+      }
+      default: return null
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+function parseParameters (config) {
+  let parameters = []
+  Object.keys(config.public).forEach((key) => {
+    parameters.push({
+      name: key,
+      type: 'public',
+      value: config.public[key]
+    })
+  })
+  Object.keys(config.secret).forEach((key) => {
+    parameters.push({
+      name: key,
+      type: 'secret',
+      value: config.secret[key]
+    })
+  })
+  return parameters
+}
+
+module.exports.compareParameters = (params1, params2) => {
+  try {
+    if (params1.length !== params2.length) return false
+    for (let i in params1) {
+      if (params1[i].name === params2[i].name &&
+        params1[i].value === params2[i].value &&
+        params1[i].type === params2[i].type) {
+        return false
+      }
+    }
+    return true
+  } catch (error) {
+    return false
   }
 }
