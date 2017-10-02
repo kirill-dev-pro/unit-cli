@@ -16,6 +16,7 @@ module.exports.syncUnits = async (user, watched) => {
   const appendToArray = (array, unit) => { array.push(unit.id); return array }
 
   let ids
+  createDirIfNotExist(user.path)
   try {
     const available = (await getAvailableUnits(user)).items
     ids = available.reduce(appendToArray, [])

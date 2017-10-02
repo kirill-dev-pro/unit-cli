@@ -98,7 +98,6 @@ const spinnerWrap = async (startMessage, successMessage, asyncFn, ...params) => 
   spinner.succeed(typeof successMessage === 'function' ? successMessage(result).cyan : successMessage.cyan)
 }
 
-const tryCatchWrap = async fn => { try { return await fn() } catch (error) { log.error(error) } }
 const setKeyToRunUnit = user => process.stdin.on('keypress', (key, param) => {
   if (param.name === 'r' && param.ctrl) {
     if (unitUpdated.name) {
@@ -139,10 +138,12 @@ async function main () {
     callback()
   }
 
+  let vorpal
+
   const deleteUnitAction = args => spinnerWrap('Deleting...', (units) => `Deleted ${units}`, deleteUnit, user, args.units)
-  const syncUnitsAction = async () => pauseWatcherWrap(spinnerWrap.bind(null, 'Updating units', 'Units updated', syncUnits, user, watched),
+  const syncUnitsAction = () => pauseWatcherWrap(spinnerWrap.bind(null, 'Updating units', 'Units updated', syncUnits, user, watched),
                                                       watchUnits.bind(null, user, unitUpdated, vorpal), watcher) // yeah, complicated
-  const createUnitAction = async (args) => spinnerWrap('Creating unit', (path) => `Unit created at ${path}`,
+  const createUnitAction = (args) => spinnerWrap('Creating unit', (path) => `Unit created at ${path}`,
                                                         createNewUnit, user, watched, args.name, args.description, args.isPrivate)
   const printUnitsAction = (args) => printUnits(user, args.level)
   const updateUserAction = (args) => log.info(args)
@@ -152,9 +153,9 @@ async function main () {
 
   function startVorpal () {
     const vorpal = new Vorpal()
-    vorpal.command('sync', 'Updates units from server')
+    vorpal.command('sync', 'Update units from server')
       .action(handler.bind(this, syncUnitsAction))
-    vorpal.command('login', 'Updates units from server')
+    vorpal.command('login', 'Login to unitcluster')
       .action(handler.bind(this, updateUserAction))
     vorpal.command('new <name> [description] [isPrivate]', 'Create new unit').alias('create')
       .action(handler.bind(this, createUnitAction))
@@ -172,14 +173,13 @@ async function main () {
     return vorpal
   }
 
+  vorpal = startVorpal()
   log.methodFactory = (methodName, logLevel, loggerName) => (...params) => vorpal.log(...params)
   log.setDefaultLevel('info')
   log.setLevel(program.loglevel)
   const user = new User()
   await user.init()
-  const vorpal = startVorpal()
-  /* if (program.sync) */ await syncUnitsAction(user, watched)
-  // else watcher.fileHound = watchUnits(user, unitUpdated, vorpal)
+  await syncUnitsAction(user, watched)
   vorpal.show()
   setKeyToRunUnit(user)
 }

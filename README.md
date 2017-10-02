@@ -30,7 +30,7 @@ unit-cli-$ new greeter-unit "Hello world unitcluster app"
 ✔ Unit created at /path/to/your/units/directory/greeter-unit
 ```
 Then edit unit files. For example paste this to your `greeter-unit/index.js`
-```
+```javascript
 module.exports = unit => unit.done(null, 'Hello world!')
 ```
 Right after you save changes on your computer `unit-cli` will update unit and show you how to run it

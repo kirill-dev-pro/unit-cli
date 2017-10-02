@@ -63,7 +63,7 @@ module.exports.createDirIfNotExist = (path) => {
       fs.mkdirSync(path)
     }
   } catch (err) {
-    log.error(err, err.stack)
+    log.debug(err, err.stack)
     throw new Error('Cannot create directory, check permisions')
   }
 }
