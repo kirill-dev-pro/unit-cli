@@ -12,6 +12,7 @@ const _ = require('underscore')
 const User = require('./user')
 const { notDuplicateEvent, getContent, compareParameters } = require('./util')
 const { printUnits, syncUnits, createNewUnit, updateUnit, deleteUnit, runUnit } = require('./units')
+const info = require('./package.json')
 
 let watched = []
 let watcher = {fileHound: null}
@@ -25,7 +26,7 @@ colors.setTheme({
 })
 
 program
-  .version('1.0.0')
+  .version(info.version)
   // .option('--no-sync', 'Disable sync at start', false)  // disabled for capability
   .option('-d, --dir [dir]', 'Define path to save units')
   .option('-l, --login [login]', 'Set login to sync units from unitcluster')
