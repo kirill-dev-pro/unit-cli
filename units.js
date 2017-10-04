@@ -6,6 +6,7 @@ const request = require('request-promise-native')
 const tree = require('tree-tree')
 const FileHound = require('filehound')
 const moment = require('moment')
+const _ = require('underscore')
 
 const { getApi, createDirIfNotExist, findLocalUnit, urlConstructor, authUser } = require('./util')
 
@@ -151,6 +152,7 @@ module.exports.updateUnit = async (unitName, user, newContent) => {
         full_name: user.login + '/' + unitName
       }
     }
+    options.form.parameters = options.form.parameters.map(param => _.pick(param, 'name', 'type', 'value')) // clean params
     log.debug('[OPTIONS]'.debug, options)
     return await request(options)
   } catch (err) {
