@@ -1,6 +1,6 @@
 {
   "name": "unit-cli",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Unitcluster cli tool",
   "main": "index.js",
   "dependencies": {
