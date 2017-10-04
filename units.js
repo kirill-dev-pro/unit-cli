@@ -16,18 +16,22 @@ module.exports.syncUnits = async (user, watched) => {
   const appendToArray = (array, unit) => { array.push(unit.id); return array }
 
   let ids
-  createDirIfNotExist(user.path)
+  try {
+    createDirIfNotExist(user.path)
+  } catch (error) {
+    throw error
+  }
   try {
     const available = (await getAvailableUnits(user)).items
     ids = available.reduce(appendToArray, [])
   } catch (err) {
-    throw new Error('Error while getting units')
+    throw new Error('Error while getting units. ' + err.message)
   }
   try {
     const units = (await getUnitsAndDeploy(user)).filter(unit => ids.indexOf(unit.id) > -1)
     saveUnits(units, user.path, watched)
   } catch (err) {
-    throw new Error('Error while saving units')
+    throw new Error('Error while saving units. ' + err.message)
   }
 }
 
@@ -95,7 +99,7 @@ module.exports.createNewUnit = async (user, watched, name, description = '', isP
       const messageObj = JSON.parse(JSON.parse(error.message.replace(/.*?"/, '"'))) // dont ask me why
       throw new Error(messageObj.message)
     }
-    throw new Error('Cannot create unit')
+    throw new Error('Cannot create unit. ' + error.message)
   }
   // log.info('Unit created at'.debug, colors.strikethrough(user.path + '/' + name), 'you can edit it now'.debug)
   // @TODO: continue improve module creating
@@ -115,7 +119,7 @@ module.exports.printUnits = (user, level = 0) => {
     return list
   }, [])
   try {
-    log.info(tree(toObject(user.login.cyan, list)))
+    log.info(tree(toObject(`[${user.login}] ${user.path}`.cyan, list)))
   } catch (err) {
     log.error(err)
   }
@@ -124,10 +128,6 @@ module.exports.printUnits = (user, level = 0) => {
 module.exports.updateUnit = async (unitName, user, newContent) => {
   try {
     const deploy = await getDeploy(unitName, user) || await createNewDeploy(unitName, user, false)
-    // log.info(await getDeploy(unitName, user))
-    log.debug(deploy)
-    // if (!deploy) deploy = await createNewDeploy(unitName, user, false)
-    // throw new Error('No deploy for unit') // @TODO: create deploy here
     log.debug('[CONTENT]'.debug, newContent)
     log.debug('[DEPLOY]'.debug, JSON.stringify(deploy))
     if (!deploy.unit) {  // deploy from create deploy does not contan unit, @BUG
@@ -156,7 +156,7 @@ module.exports.updateUnit = async (unitName, user, newContent) => {
   } catch (err) {
     if (err.message === 'No deploy for unit') throw err
     log.debug(err, err.stack)
-    throw new Error('Error while updating unit')
+    throw new Error('Error while updating unit. ' + err.message)
   }
 }
 
@@ -175,7 +175,7 @@ module.exports.deleteUnit = (user, argsArray) => {
       fs.readdirSync(source).forEach(file => fs.unlinkSync(path.join(source, file)))
       fs.rmdirSync(source)
     } catch (err) {
-      throw new Error('Error while deleting unit localy\n' + source)
+      throw new Error('Error while deleting unit localy. ' + err.message)
     }
   }
 

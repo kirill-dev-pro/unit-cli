@@ -1,5 +1,6 @@
 ![Unitcluster logo](http://oi63.tinypic.com/219ri8i.jpg)
 [![Build Status](https://travis-ci.org/Zmeu213/unit-cli.svg?branch=master)](https://travis-ci.org/Zmeu213/unit-cli)
+[![JavaScript Style Guide](https://cdn.rawgit.com/standard/standard/master/badge.svg)](https://github.com/standard/standard)
 
 ## command line interface :computer: 
 * Create and remove units

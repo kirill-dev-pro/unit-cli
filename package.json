@@ -5,11 +5,13 @@
   "main": "index.js",
   "dependencies": {
     "colors": "^1.1.2",
+    "command-line-commands": "^2.0.1",
     "commander": "^2.11.0",
     "filehound": "^1.16.2",
     "json-beautify": "^1.0.1",
     "keypress": "^0.2.1",
     "loglevel": "^1.5.0",
+    "mkdirp": "^0.5.1",
     "moment": "^2.18.1",
     "node-watch": "^0.5.5",
     "ora": "^1.3.0",
@@ -33,6 +35,21 @@
   "keywords": [
     "cli"
   ],
+  "standard": {
+    "ignore": [
+      "__tests__/*.test.js",
+      "units/",
+      "node_modules/",
+      ".vscode/"
+    ],
+    "globals": [
+      "expect",
+      "test",
+      "beforeAll",
+      "afterAll",
+      "describe"
+    ]
+  },
   "author": "Kirill",
   "license": "ISC",
   "bin": "./index.js",
