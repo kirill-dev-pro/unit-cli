@@ -5,6 +5,7 @@ const path = require('path')
 const colors = require('colors')
 const request = require('request-promise-native')
 const fs = require('fs')
+const mkdirp = require('mkdirp')
 
 let readline = {}
 
@@ -46,7 +47,7 @@ module.exports.findLocalUnit = (user, name) => {
 module.exports.getApi = async (user, ...params) => {
   try {
     const options = {
-      url: user.server + '/api/' + params.join('/'),
+      url: user.server + '/api/' + params.join('/') + '?per_page=1000',
       method: 'GET',
       headers: authUser(user)
     }
@@ -60,11 +61,11 @@ module.exports.getApi = async (user, ...params) => {
 module.exports.createDirIfNotExist = (path) => {
   try {
     if (!fs.existsSync(path)) {
-      fs.mkdirSync(path)
+      mkdirp.sync(path)
     }
   } catch (err) {
     log.debug(err, err.stack)
-    throw new Error('Cannot create directory, check permisions')
+    throw new Error('Cannot create directory. ' + err.message)
   }
 }
 
@@ -147,4 +148,3 @@ module.exports.compareParameters = (params1, params2) => {
     return false
   }
 }
-

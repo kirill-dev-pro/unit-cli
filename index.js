@@ -8,6 +8,10 @@ const colors = require('colors')
 const watch = require('node-watch')
 const path = require('path')
 const _ = require('underscore')
+const commandLineCommands = require('command-line-commands')
+
+const validCommands = [ null, 'sync', 'new', 'run', 'rm', 'remove', 'ls', 'list' ]
+const { command, argv } = commandLineCommands(validCommands)
 
 const User = require('./user')
 const { notDuplicateEvent, getContent, compareParameters } = require('./util')
@@ -38,7 +42,10 @@ program
   .option('-p, --public [boolean]', 'Using with -n defines type of new unit, default true', true)
   .parse(process.argv)
 
-function watchUnits (user, unitUpdated, vorpal) {
+const sleep = time => { return new Promise(resolve => setTimeout(() => { resolve() }, time)) }
+
+async function watchUnits (user, unitUpdated, vorpal) {
+  await sleep(100)
   const watcher = watch(user.path, { recursive: true }, async (evt, filePath) => {
     if (notDuplicateEvent(filePath, watched, lastEvent)) {
       const file = path.parse(filePath)
@@ -99,7 +106,7 @@ const spinnerWrap = async (startMessage, successMessage, asyncFn, ...params) => 
   spinner.succeed(typeof successMessage === 'function' ? successMessage(result).cyan : successMessage.cyan)
 }
 
-const setKeyToRunUnit = user => process.stdin.on('keypress', (key, param) => {
+const setShortcuts = user => process.stdin.on('keypress', (key, param) => {
   if (param.name === 'r' && param.ctrl) {
     if (unitUpdated.name) {
       try {
@@ -109,6 +116,10 @@ const setKeyToRunUnit = user => process.stdin.on('keypress', (key, param) => {
       }
     }
   }
+  if (param.name === 'd' && param.ctrl) {
+    console.log('\nBye!')
+    process.exit()
+  }
 })
 
 const pauseWatcherWrap = async (fn, reopenWatcher, watcher) => {
@@ -116,7 +127,7 @@ const pauseWatcherWrap = async (fn, reopenWatcher, watcher) => {
     if (!watcher.fileHound.isClosed()) watcher.fileHound.close()
   }
   await fn()
-  if (reopenWatcher) watcher.fileHound = reopenWatcher()
+  if (reopenWatcher) watcher.fileHound = await reopenWatcher()
 }
 
 async function main () {
@@ -174,15 +185,53 @@ async function main () {
     return vorpal
   }
 
+  async function checkCommands (user) {
+    log.debug(command, argv[0], argv[1], argv[2])
+    switch (command) {
+      case 'sync': {
+        await spinnerWrap('Updating units', 'Units updated', syncUnits, user, watched)
+        return 1
+      }
+      case 'new': {
+        await createUnitAction({name: argv[0], description: argv[1], isPrivate: argv[2]})
+        return 1
+      }
+      case 'ls':
+      case 'list': {
+        printUnitsAction({level: argv[0]})
+        return 1
+      }
+      case 'rm':
+      case 'remove': {
+        await deleteUnitAction({units: argv})
+        return 1
+      }
+      case 'run': {
+        runUnitAction({unit: argv[0]})
+        return 0
+      }
+      case null:
+      default: return -1
+    }
+  }
+
   vorpal = startVorpal()
   log.methodFactory = (methodName, logLevel, loggerName) => (...params) => vorpal.log(...params)
   log.setDefaultLevel('info')
   log.setLevel(program.loglevel)
   const user = new User()
   await user.init()
-  await syncUnitsAction(user, watched)
-  vorpal.show()
-  setKeyToRunUnit(user)
+  setShortcuts(user)
+  const state = await checkCommands(user)
+  if (state === -1) {
+    await syncUnitsAction(user, watched)
+    vorpal.show()
+  } else if (state === 1) {
+    log.info('All done')
+    process.exit()
+  } else if (state === 0) {
+    vorpal.show()
+  }
 }
 
 main()
