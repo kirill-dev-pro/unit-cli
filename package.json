@@ -13,10 +13,12 @@
     "loglevel": "^1.5.0",
     "mkdirp": "^0.5.1",
     "moment": "^2.18.1",
+    "mongodb": "^2.2.31",
     "node-watch": "^0.5.5",
     "ora": "^1.3.0",
     "request": "^2.81.0",
     "request-promise-native": "^1.0.4",
+    "telegraf": "^3.12.1",
     "tree-tree": "^2.0.0",
     "underscore": "^1.8.3",
     "vorpal": "^1.12.0"
