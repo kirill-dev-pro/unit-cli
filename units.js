@@ -279,13 +279,19 @@ async function printUnitLogs (unitName, user) {
     // Parse logs
     log.debug(chunk.toString())
     if (chunk.toString().substring(0, 5) === 'data:') {
-      let message = JSON.parse(chunk.toString().substring(5))
+      let message
+      try {
+        message = JSON.parse(chunk.toString().substring(5))
+      } catch (error) {
+        log.debug('[Chunk with error]'.red, chunk.toString())
+        return
+      }
       if (message.log) {
         if (lastTs !== message.ts) {
           log.info('[ %s ]'.green, message.ts)
           lastTs = message.ts
         }
-        log.info('[ %s ] :'.green, message.slot, message.log)
+        log.info('[ %s ]'.green, message.slot, message.log)
       }
       if (message.memory || message.cpu) {
         // do something with stats
@@ -293,7 +299,7 @@ async function printUnitLogs (unitName, user) {
     }
   })
   logStream.on('end', () => {
-    log.debug('[ %s-%s ]'.info, unitName, moment().format())
+    log.debug('[ %s-%s ]'.green, unitName, moment().format())
     log.debug('End of logs')
   })
 }

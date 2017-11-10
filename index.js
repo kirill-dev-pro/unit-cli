@@ -227,7 +227,6 @@ async function main () {
     await syncUnitsAction(user, watched)
     vorpal.show()
   } else if (state === 1) {
-    log.info('All done')
     process.exit()
   } else if (state === 0) {
     vorpal.show()
